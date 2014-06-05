@@ -754,7 +754,7 @@ impl BlockFlow {
     }
 
     /// If this is the root flow, shifts all kids down and adjusts our size to account for
-    /// collapsed margins.
+    /// root flow margins, which should never be collapsed according to CSS § 8.3.1.
     ///
     /// TODO(#2017, pcwalton): This is somewhat inefficient (traverses kids twice); can we do
     /// better?
@@ -764,7 +764,7 @@ impl BlockFlow {
         }
 
         let (top_margin_value, bottom_margin_value) = match self.base.collapsible_margins {
-            MarginsCollapseThrough(margin) => (Au(0), margin.collapse()),
+            MarginsCollapseThrough(_) => { fail!("Margins unexpectedly collapsed through root flow."); }
             MarginsCollapse(top_margin, bottom_margin) => {
                 (top_margin.collapse(), bottom_margin.collapse())
             }
@@ -1556,6 +1556,11 @@ impl Flow for BlockFlow {
         if self.is_float() {
             debug!("assign_height_float: assigning height for float");
             self.assign_height_float(ctx);
+        } else if self.is_root() {
+            debug!("assign_height: assigning height for root flow");
+
+            // Root element margins should never be collapsed according to CSS § 8.3.1.
+            self.assign_height_block_base(ctx, MarginsMayNotCollapse);
         } else {
             debug!("assign_height: assigning height for block");
             self.assign_height_block_base(ctx, MarginsMayCollapse);
