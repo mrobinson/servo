@@ -764,7 +764,7 @@ impl BlockFlow {
         }
 
         let (top_margin_value, bottom_margin_value) = match self.base.collapsible_margins {
-            MarginsCollapseThrough(_) => { fail!("Margins unexpectedly collapsed through root flow."); }
+            MarginsCollapseThrough(_, _) => fail!("Margins unexpectedly collapsed through root flow."),
             MarginsCollapse(top_margin, bottom_margin) => {
                 (top_margin.collapse(), bottom_margin.collapse())
             }
