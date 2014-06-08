@@ -77,3 +77,5 @@
 == overconstrained_block.html overconstrained_block_ref.html
 == position_fixed_background_color_a.html position_fixed_background_color_b.html
 == root_margin_collapse_a.html root_margin_collapse_b.html
+== position_abs_margin_collapse_static_position_a.html position_abs_margin_collapse_static_position_b.html
+== position_abs_margin_collapse_child_static_position_a.html position_abs_margin_collapse_child_static_position_b.html

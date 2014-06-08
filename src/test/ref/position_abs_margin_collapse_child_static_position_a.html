@@ -1,0 +1,38 @@
+<html>
+    <body style="margin: 0px;">
+        <style>
+        .square {
+            width: 50px;
+            height: 50px;
+            background: black;
+        }
+        </style>
+        <!-- This div has a border so its margins should not collapse through.
+             It should be 10px tall since the margins of its child do collapse
+             through. -->
+        <div style="border: 1px solid black;">
+            <div style="margin: 10px;">
+                <!-- The divs should be positioned after the parent's top margin,
+                     not at 0 or 20, because the parent element's margins do not
+                     collapse with the grandparent's margins.
+
+                     See the note about "collapse through" in section 8.3.1 of the
+                     CSS 2 spec.
+                  -->
+                <div class="square" style="position: absolute;"></div>
+                <div class="square" style="position: absolute; left: 120px;"></div>
+            </div>
+        </div>
+
+        <!-- The positioning of the children should be the same, but the parent div,
+             should have 0 height, since the child's negative bottom margin collapses
+             away the top margin. -->
+        <div style="margin-top: 100px; top: 100px; border: 1px solid black;">
+            <div style="margin: 10px; margin-bottom: -20px;">
+                <div class="square" style="position: absolute;"></div>
+                <div class="square" style="position: absolute; left: 120px;"></div>
+            </div>
+        </div>
+
+    </body>
+</html>

@@ -69,7 +69,7 @@ pub enum CollapsibleMargins {
 
     /// Margins collapse *through* this flow. This means, essentially, that the flow doesn’t
     /// have any border, padding, or out-of-flow (floating or positioned) content
-    MarginsCollapseThrough(AdjoiningMargins),
+    MarginsCollapseThrough(AdjoiningMargins, AdjoiningMargins),
 }
 
 impl CollapsibleMargins {
@@ -157,8 +157,7 @@ impl MarginCollapseInfo {
         } else {
             match state {
                 MarginsCollapseThroughFinalMarginState => {
-                    self.top_margin.union(AdjoiningMargins::from_margin(bottom_margin));
-                    (MarginsCollapseThrough(self.top_margin), Au(0))
+                    (MarginsCollapseThrough(self.top_margin, AdjoiningMargins::from_margin(bottom_margin)), Au(0))
                 }
                 BottomMarginCollapsesFinalMarginState => {
                     self.margin_in.union(AdjoiningMargins::from_margin(bottom_margin));
@@ -200,7 +199,17 @@ impl MarginCollapseInfo {
                 self.margin_in = AdjoiningMargins::new();
                 margin_value
             }
-            (_, MarginsCollapseThrough(_)) => {
+            (AccumulatingMarginIn, MarginsCollapseThrough(top_margin, bottom_margin)) => {
+                // This child div collapses-through, but its top margin does not collapse with the
+                // current element's top margin. According to the CSS spec "The position of the element's
+                // top border edge is the same as it would have been if the element had a non-zero
+                // bottom border" (CSS § 8.3.1). Since the child collapses-through it doesn't have any
+                // in-flow elements, but the top border edge still affects where out-of-flow elements
+                // with static positions are placed.
+                self.margin_in.union(top_margin);
+                self.margin_in.collapse()
+            }
+            (AccumlatingCollapsibleTopMargin, MarginsCollapseThrough(_, _)) => {
                 // For now, we ignore this; this will be handled by `advance_bottom_margin` below.
                 Au(0)
             }
@@ -218,8 +227,9 @@ impl MarginCollapseInfo {
                 // `AccumulatingMarginIn` above.
                 fail!("should not be accumulating collapsible top margins anymore!")
             }
-            (AccumulatingCollapsibleTopMargin, MarginsCollapseThrough(margin)) => {
-                self.top_margin.union(margin);
+            (AccumulatingCollapsibleTopMargin, MarginsCollapseThrough(top_margin, bottom_margin)) => {
+                self.top_margin.union(top_margin);
+                self.top_margin.union(bottom_margin);
                 Au(0)
             }
             (AccumulatingMarginIn, NoCollapsibleMargins(_, bottom)) => {
@@ -227,8 +237,15 @@ impl MarginCollapseInfo {
                 assert_eq!(self.margin_in.most_negative, Au(0));
                 bottom
             }
-            (AccumulatingMarginIn, MarginsCollapse(_, bottom)) |
-            (AccumulatingMarginIn, MarginsCollapseThrough(bottom)) => {
+            (AccumulatingMarginIn, MarginsCollapseThrough(_, bottom)) => {
+                // Since we moved the advance for the sake of out-of-flow statically positioned
+                // elements above, we need to undo that advance, to ensure proper margin-collapsing
+                // behavior for any later in-flow elements.
+                let undo_top_advance = -self.margin_in.collapse();
+                self.margin_in.union(bottom);
+                undo_top_advance
+            }
+            (AccumulatingMarginIn, MarginsCollapse(_, bottom)) => {
                 self.margin_in.union(bottom);
                 Au(0)
             }

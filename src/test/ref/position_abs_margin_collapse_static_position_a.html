@@ -1,0 +1,19 @@
+<html>
+    <body style="margin: 10px;">
+        <style>
+        div {
+            width: 100px;
+            height: 100px;
+            background: black;
+        }
+        </style>
+        <!-- The divs should be positioned after the body's top margin,
+             not at 0 or 20, because the body element's margins do not
+             collapse with the root element's margins (which never collapse).
+             See the note about "collapse through" in section 8.3.1 of the
+             CSS 2 spec.
+          -->
+        <div style="position: absolute;"></div>
+        <div style="position: fixed; left: 120px;"></div>
+    </body>
+</html>
