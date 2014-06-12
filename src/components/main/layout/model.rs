@@ -174,6 +174,19 @@ impl MarginCollapseInfo {
         }
     }
 
+    pub fn current_origin_only_offset(&mut self, child_collapsible_margins: &CollapsibleMargins) -> Au {
+        match (self.state, *child_collapsible_margins) {
+            // This child div collapses-through, but its top margin does not collapse with the
+            // current element's top margin. According to the CSS spec "The position of the element's
+            // top border edge is the same as it would have been if the element had a non-zero
+            // bottom border" (CSS § 8.3.1). Since the child collapses-through it doesn't have any
+            // non-zero-height in-flow elements, but the top border edge still affects where out-of-flow elements
+            // with static positions are placed.
+            (AccumulatingMarginIn, MarginsCollapseThrough(top_margin, bottom_margin)) => self.margin_in.collapse(),
+            (_, _) => Au(0)
+        }
+    }
+
     /// Adds the child's potentially collapsible top margin to the current margin state and
     /// advances the Y offset by the appropriate amount to handle that margin. Returns the amount
     /// that should be added to the Y offset during block layout.
@@ -200,14 +213,10 @@ impl MarginCollapseInfo {
                 margin_value
             }
             (AccumulatingMarginIn, MarginsCollapseThrough(top_margin, bottom_margin)) => {
-                // This child div collapses-through, but its top margin does not collapse with the
-                // current element's top margin. According to the CSS spec "The position of the element's
-                // top border edge is the same as it would have been if the element had a non-zero
-                // bottom border" (CSS § 8.3.1). Since the child collapses-through it doesn't have any
-                // in-flow elements, but the top border edge still affects where out-of-flow elements
-                // with static positions are placed.
+                // We are going to want to calculate the position of the margin top (uncollapsed with
+                // the bottom margin) later in current_origin_only_offset.
                 self.margin_in.union(top_margin);
-                self.margin_in.collapse()
+                Au(0)
             }
             (AccumlatingCollapsibleTopMargin, MarginsCollapseThrough(_, _)) => {
                 // For now, we ignore this; this will be handled by `advance_bottom_margin` below.
@@ -237,14 +246,7 @@ impl MarginCollapseInfo {
                 assert_eq!(self.margin_in.most_negative, Au(0));
                 bottom
             }
-            (AccumulatingMarginIn, MarginsCollapseThrough(_, bottom)) => {
-                // Since we moved the advance for the sake of out-of-flow statically positioned
-                // elements above, we need to undo that advance, to ensure proper margin-collapsing
-                // behavior for any later in-flow elements.
-                let undo_top_advance = -self.margin_in.collapse();
-                self.margin_in.union(bottom);
-                undo_top_advance
-            }
+            (AccumulatingMarginIn, MarginsCollapseThrough(_, bottom)) |
             (AccumulatingMarginIn, MarginsCollapse(_, bottom)) => {
                 self.margin_in.union(bottom);
                 Au(0)

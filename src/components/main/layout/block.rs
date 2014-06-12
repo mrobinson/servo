@@ -897,7 +897,8 @@ impl BlockFlow {
             cur_y = cur_y + clearance;
 
             // At this point, `cur_y` is at the border edge of the child.
-            flow::mut_base(kid).position.origin.y = cur_y;
+            flow::mut_base(kid).position.origin.y = cur_y +
+                margin_collapse_info.current_origin_only_offset(&flow::base(kid).collapsible_margins);
 
             // Now pull out the child's outgoing floats. We didn't do this immediately after the
             // `assign_height_for_inorder_child_if_necessary` call because clearance on a block
