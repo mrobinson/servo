@@ -70,7 +70,7 @@ pub enum CollapsibleMargins {
 
     /// Margins collapse *through* this flow. This means, essentially, that the flow doesn’t
     /// have any border, padding, or out-of-flow (floating or positioned) content
-    CollapseThrough(AdjoiningMargins),
+    CollapseThrough(AdjoiningMargins, AdjoiningMargins),
 }
 
 impl CollapsibleMargins {
@@ -157,9 +157,10 @@ impl MarginCollapseInfo {
             }
         } else {
             match state {
-                FinalMarginState::MarginsCollapseThrough => {
-                    self.block_start_margin.union(AdjoiningMargins::from_margin(block_end_margin));
-                    (CollapsibleMargins::CollapseThrough(self.block_start_margin), Au(0))
+                FinalMarginState::MarginsCollapseThroug => {
+                    (CollapsibleMargins::CollapseThrough(self.block_start_margin,
+                     AdjoiningMargins::from_margin(block_end_margin)),
+                     Au(0))
                 }
                 FinalMarginState::BottomMarginCollapses => {
                     self.margin_in.union(AdjoiningMargins::from_margin(block_end_margin));
@@ -201,7 +202,13 @@ impl MarginCollapseInfo {
                 self.margin_in = AdjoiningMargins::new();
                 margin_value
             }
-            (_, CollapsibleMargins::CollapseThrough(_)) => {
+            (MarginCollapseState::AccumulatingMarginIn, MarginsCollapseThrough(block_start, _)) => {
+                // We are going to want to calculate the position of the margin top (uncollapsed with
+                // the bottom margin) later in current_origin_only_offset.
+                self.margin_in.union(block_start);
+                Au(0)
+            }
+            (MarginCollapseState::AccumulatingCollapsibleTopMargin, MarginsCollapseThrough(_, _)) => {
                 // For now, we ignore this; this will be handled by `advance_block-end_margin` below.
                 Au(0)
             }
@@ -219,8 +226,10 @@ impl MarginCollapseInfo {
                 // `MarginCollapseState::AccumulatingMarginIn` above.
                 panic!("should not be accumulating collapsible block_start margins anymore!")
             }
-            (MarginCollapseState::AccumulatingCollapsibleTopMargin, CollapsibleMargins::CollapseThrough(margin)) => {
-                self.block_start_margin.union(margin);
+            (MarginCollapseState::AccumulatingCollapsibleTopMargin,
+             CollapsibleMargins::CollapseThrough(block_start, block_end)) => {
+                self.block_start_margin.union(block_start);
+                self.block_start_margin.union(block_end);
                 Au(0)
             }
             (MarginCollapseState::AccumulatingMarginIn, CollapsibleMargins::None(_, block_end)) => {
@@ -228,11 +237,24 @@ impl MarginCollapseInfo {
                 assert_eq!(self.margin_in.most_negative, Au(0));
                 block_end
             }
-            (MarginCollapseState::AccumulatingMarginIn, CollapsibleMargins::Collapse(_, block_end)) |
-            (MarginCollapseState::AccumulatingMarginIn, CollapsibleMargins::CollapseThrough(block_end)) => {
+            (MarginCollapseState::AccumulatingMarginIn, CollapsibleMargins::CollapseThrough(_, block_end)) |
+            (MarginCollapseState::AccumulatingMarginIn, CollapsibleMargins::Collapse(_, block_end)) => {
                 self.margin_in.union(block_end);
                 Au(0)
             }
+        }
+    }
+
+    pub fn current_origin_only_offset(&mut self, child_collapsible_margins: &CollapsibleMargins) -> Au {
+        match (self.state, *child_collapsible_margins) {
+            // This child element collapses-through, but its top margin does not collapse with the
+            // current element's top margin. According to the CSS spec "The position of the element's
+            // top border edge is the same as it would have been if the element had a non-zero
+            // bottom border" (CSS § 8.3.1). Since the child collapses-through it doesn't have any
+            // non-zero-height in-flow elements, but the top border edge still affects where out-of-flow elements
+            // with static positions are placed.
+            (AccumulatingMarginIn, MarginsCollapseThrough(_, _)) => self.margin_in.collapse(),
+            (_, _) => Au(0)
         }
     }
 }

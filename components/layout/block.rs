@@ -793,7 +793,7 @@ impl BlockFlow {
         }
 
         let (block_start_margin_value, block_end_margin_value) = match self.base.collapsible_margins {
-            CollapsibleMargins::CollapseThrough(_) => panic!("Margins unexpectedly collapsed through root flow."),
+            CollapsibleMargins::CollapseThrough(_, _) => fail!("Margins unexpectedly collapsed through root flow."),
             CollapsibleMargins::Collapse(block_start_margin, block_end_margin) => {
                 (block_start_margin.collapse(), block_end_margin.collapse())
             }
@@ -945,6 +945,9 @@ impl BlockFlow {
                 // box.
                 let kid_base = flow::mut_base(kid);
                 cur_b = cur_b + kid_base.position.size.block;
+//            // At this point, `cur_b` is at the border edge of the child.
+//            flow::mut_base(kid).position.start.b = cur_b +
+//                margin_collapse_info.current_origin_only_offset(&flow::base(kid).collapsible_margins);
 
                 // Handle any (possibly collapsed) block-end margin.
                 let delta =
