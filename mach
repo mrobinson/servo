@@ -21,6 +21,13 @@ def main(args):
     sys.path.insert(0, os.path.join(topdir, "python"))
     import mach_bootstrap
     mach = mach_bootstrap.bootstrap(topdir)
+
+
+    import mozlog
+    import interactive_html_formatter
+    mozlog.commandline.log_formatters["myhtml"] = \
+        (interactive_html_formatter.InteractiveHTMLFormatter, "My HTML Formatter")
+
     sys.exit(mach.run(sys.argv[1:]))
 
 

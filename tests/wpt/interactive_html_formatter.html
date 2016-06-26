@@ -1,0 +1,101 @@
+<html>
+
+<head>
+    <style>
+        #results {
+            width: 100%;
+            min-width: 
+        }
+
+        #results, #results td, #results th {
+            border: 1px solid black;
+            border-collapse: collapse;
+        }
+
+        #results td, #results th {
+            padding: 5px;
+        }
+
+        #results td img {
+            border: 1px solid black;
+        }
+    </style>
+
+</head>
+
+<body>
+    <table id="results">
+        <tr><th>Result</th><th></th><th>Test</th><th>Duration (s)</th></tr>
+    </table>
+
+    <script>
+        var __results = {0}
+        var rows = document.createDocumentFragment();
+        __results['unexpected'].forEach(function(result) {
+            var hasScreenshots = result['extra']['reftest_screenshots'] != undefined;
+
+            var row = document.createElement("tr");
+            var screenshotRow = document.createElement("tr");
+
+            var cell = document.createElement("td");
+            cell.innerHTML = result["status"];
+            row.appendChild(cell);
+
+            var cell = document.createElement("td");
+            row.appendChild(cell);
+            if (hasScreenshots) {
+                cell.innerHTML = "&#128247;"
+                cell.addEventListener("click", function() {
+                    screenshotRow.style.display =
+                        screenshotRow.style.display == "none" ? "table-row" : "none";
+                });
+            }
+
+            var cell = document.createElement("td");
+            cell.innerHTML = result["test"];
+            row.appendChild(cell);
+
+            var cell = document.createElement("td");
+            cell.innerHTML = result["duration"];
+            row.appendChild(cell);
+
+            rows.appendChild(row);
+
+            if (hasScreenshots) {
+                var screenshotCell = document.createElement("td");
+                screenshotCell.setAttribute("colspan", "4");
+
+                var screenshots = result['extra']['reftest_screenshots']
+
+                var resultImage = document.createElement("img");
+                resultImage.src = "data:image/png;base64," + screenshots[0]['screenshot'];
+                resultImage.style.position = "absolute";
+
+                var referenceImage = document.createElement("img");
+                referenceImage.src = "data:image/png;base64," + screenshots[2]['screenshot'];
+
+                var slider = document.createElement("input")
+                slider.type = "range";
+                slider.min = "0";
+                slider.max = "100";
+                slider.addEventListener("change", function() {
+                    resultImage.style.opacity = (100 - slider.value) / 100;
+                    referenceImage.style.opacity = slider.value / 100;
+                });
+
+                var sliderDiv = document.createElement("div")
+                sliderDiv.appendChild(slider);
+
+                screenshotCell.appendChild(sliderDiv);
+                screenshotCell.appendChild(resultImage);
+                screenshotCell.appendChild(referenceImage);
+                screenshotRow.appendChild(screenshotCell);
+                rows.appendChild(screenshotRow);
+            }
+        });
+
+        document.getElementById("results").appendChild(rows);
+    </script>
+</body>
+
+</html>

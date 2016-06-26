@@ -7,6 +7,7 @@ import os
 import sys
 import mozlog
 import grouping_formatter
+import interactive_html_formatter
 
 here = os.path.split(__file__)[0]
 servo_root = os.path.abspath(os.path.join(here, "..", ".."))
