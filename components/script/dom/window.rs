@@ -1402,19 +1402,6 @@ impl Window {
         self.layout_rpc.node_geometry().client_rect
     }
 
-    pub fn hit_test_query(&self,
-                          client_point: Point2D<f32>,
-                          update_cursor: bool)
-                          -> Option<UntrustedNodeAddress> {
-        if !self.reflow(ReflowGoal::ForScriptQuery,
-                        ReflowQueryType::HitTestQuery(client_point, update_cursor),
-                        ReflowReason::Query) {
-            return None
-        }
-
-        self.layout_rpc.hit_test().node_address
-    }
-
     pub fn scroll_area_query(&self, node: TrustedNodeAddress) -> Rect<i32> {
         if !self.reflow(ReflowGoal::NodeScrollGeometryQuery(node), ReflowReason::Query) {
             return Rect::zero();

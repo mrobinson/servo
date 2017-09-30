@@ -100,6 +100,11 @@ pub enum Msg {
     SetNavigationStart(f64),
 }
 
+#[derive(Debug, PartialEq)]
+pub enum NodesFromPointQueryType {
+    All,
+    Topmost,
+}
 
 /// Any query to perform with this reflow.
 #[derive(Debug, PartialEq)]
@@ -109,7 +114,6 @@ pub enum ReflowGoal {
     ContentBoxQuery(TrustedNodeAddress),
     ContentBoxesQuery(TrustedNodeAddress),
     NodeOverflowQuery(TrustedNodeAddress),
-    HitTestQuery(Point2D<f32>, bool),
     NodeScrollRootIdQuery(TrustedNodeAddress),
     NodeGeometryQuery(TrustedNodeAddress),
     NodeScrollGeometryQuery(TrustedNodeAddress),
@@ -118,6 +122,7 @@ pub enum ReflowGoal {
     MarginStyleQuery(TrustedNodeAddress),
     TextIndexQuery(TrustedNodeAddress, i32, i32),
     NodesFromPoint(Point2D<f32>),
+    NodesFromPointQuery(Point2D<f32>, NodesFromPointQueryType),
 }
 
 impl ReflowGoal {

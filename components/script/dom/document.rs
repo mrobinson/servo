@@ -11,10 +11,8 @@ use dom::attr::Attr;
 use dom::beforeunloadevent::BeforeUnloadEvent;
 use dom::bindings::callback::ExceptionHandling;
 use dom::bindings::cell::DOMRefCell;
-use dom::bindings::codegen::Bindings::DOMRectBinding::DOMRectMethods;
 use dom::bindings::codegen::Bindings::DocumentBinding;
 use dom::bindings::codegen::Bindings::DocumentBinding::{DocumentMethods, DocumentReadyState, ElementCreationOptions};
-use dom::bindings::codegen::Bindings::ElementBinding::ElementMethods;
 use dom::bindings::codegen::Bindings::HTMLIFrameElementBinding::HTMLIFrameElementBinding::HTMLIFrameElementMethods;
 use dom::bindings::codegen::Bindings::NodeBinding::NodeMethods;
 use dom::bindings::codegen::Bindings::NodeFilterBinding::NodeFilter;
@@ -95,13 +93,14 @@ use dom::windowproxy::WindowProxy;
 use dom_struct::dom_struct;
 use encoding::EncodingRef;
 use encoding::all::UTF_8;
-use euclid::{Point2D, Vector2D};
+use euclid::Point2D;
 use html5ever::{LocalName, Namespace, QualName};
 use hyper::header::{Header, SetCookie};
 use hyper_serde::Serde;
 use ipc_channel::ipc::{self, IpcSender};
 use js::jsapi::{JSContext, JSObject, JSRuntime};
 use js::jsapi::JS_GetRuntime;
+use libc::c_void;
 use msg::constellation_msg::{ALT, CONTROL, SHIFT, SUPER};
 use msg::constellation_msg::{BrowsingContextId, Key, KeyModifiers, KeyState, TopLevelBrowsingContextId};
 use net_traits::{FetchResponseMsg, IpcSend, ReferrerPolicy};
@@ -111,14 +110,12 @@ use net_traits::pub_domains::is_pub_domain;
 use net_traits::request::RequestInit;
 use net_traits::response::HttpsState;
 use num_traits::ToPrimitive;
-use script_layout_interface::message::{Msg, ReflowQueryType};
+use script_layout_interface::message::{Msg, NodesFromPointQueryType, ReflowGoal};
 use script_runtime::{CommonScriptMsg, ScriptThreadEventCategory};
 use script_thread::{MainThreadScriptMsg, ScriptThread};
-use script_traits::{AnimationState, CompositorEvent, DocumentActivity};
-use script_traits::{MouseButton, MouseEventType, MozBrowserEvent};
-use script_traits::{MsDuration, ScriptMsg, TouchpadPressurePhase};
-use script_traits::{TouchEventType, TouchId};
-use script_traits::UntrustedNodeAddress;
+use script_traits::{AnimationState, DocumentActivity, MouseButton, MouseEventType};
+use script_traits::{MozBrowserEvent, MsDuration, ScriptMsg, TouchEventType, TouchId};
+use script_traits::{TouchpadPressurePhase, UntrustedNodeAddress};
 use servo_arc::Arc;
 use servo_atoms::Atom;
 use servo_config::prefs::PREFS;
@@ -134,7 +131,7 @@ use std::mem;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 use style::attr::AttrValue;
-use style::context::{QuirksMode, ReflowGoal};
+use style::context::QuirksMode;
 use style::invalidation::element::restyle_hints::{RestyleHint, RESTYLE_SELF, RESTYLE_STYLE_ATTRIBUTE};
 use style::media_queries::{Device, MediaList, MediaType};
 use style::selector_parser::{RestyleDamage, Snapshot};
@@ -837,9 +834,10 @@ impl Document {
     #[allow(unsafe_code)]
     pub fn handle_mouse_event(&self,
                               js_runtime: *mut JSRuntime,
-                              button: MouseButton,
+                              _button: MouseButton,
                               client_point: Point2D<f32>,
-                              mouse_event_type: MouseEventType) {
+                              mouse_event_type: MouseEventType,
+                              node_address: Option<u64>) {
         let mouse_event_type_string = match mouse_event_type {
             MouseEventType::Click => "click".to_owned(),
             MouseEventType::MouseUp => "mouseup".to_owned(),
@@ -847,40 +845,17 @@ impl Document {
         };
         debug!("{}: at {:?}", mouse_event_type_string, client_point);
 
-        let node = match self.window.hit_test_query(client_point, false) {
-            Some(node_address) => {
-                debug!("node address is {:?}", node_address);
-                unsafe {
-                    node::from_untrusted_node_address(js_runtime, node_address)
-                }
-            },
+        let el = node_address.and_then(|address| {
+            let address = UntrustedNodeAddress(address as *const c_void);
+            let node = unsafe { node::from_untrusted_node_address(js_runtime, address) };
+            node.inclusive_ancestors()
+                .filter_map(Root::downcast::<Element>)
+                .next()
+        });
+        let el = match el {
+            Some(el) => el,
             None => return,
         };
-
-        let el = match node.downcast::<Element>() {
-            Some(el) => Root::from_ref(el),
-            None => {
-                let parent = node.GetParentNode();
-                match parent.and_then(Root::downcast::<Element>) {
-                    Some(parent) => parent,
-                    None => return,
-                }
-            },
-        };
-
-        // If the target is an iframe, forward the event to the child document.
-        if let Some(iframe) = el.downcast::<HTMLIFrameElement>() {
-            if let Some(pipeline_id) = iframe.pipeline_id() {
-                let rect = iframe.upcast::<Element>().GetBoundingClientRect();
-                let child_origin = Vector2D::new(rect.X() as f32, rect.Y() as f32);
-                let child_point = client_point - child_origin;
-
-                let event = CompositorEvent::MouseButtonEvent(mouse_event_type, button, child_point);
-                let event = ScriptMsg::ForwardEvent(pipeline_id, event);
-                self.send_to_constellation(event);
-            }
-            return;
-        }
 
         let node = el.upcast::<Node>();
         debug!("{} on {:?}", mouse_event_type_string, node.debug_str());
@@ -1000,42 +975,20 @@ impl Document {
     #[allow(unsafe_code)]
     pub fn handle_touchpad_pressure_event(&self,
                                           js_runtime: *mut JSRuntime,
-                                          client_point: Point2D<f32>,
                                           pressure: f32,
-                                          phase_now: TouchpadPressurePhase) {
-        let node = match self.window.hit_test_query(client_point, false) {
-            Some(node_address) => unsafe {
-                node::from_untrusted_node_address(js_runtime, node_address)
-            },
-            None => return
+                                          phase_now: TouchpadPressurePhase,
+                                          node_address: Option<u64>) {
+        let el = node_address.and_then(|address| {
+            let address = UntrustedNodeAddress(address as *const c_void);
+            let node = unsafe { node::from_untrusted_node_address(js_runtime, address) };
+            node.inclusive_ancestors()
+                .filter_map(Root::downcast::<Element>)
+                .next()
+        });
+        let el = match el {
+            Some(el) => el,
+            None => return,
         };
-
-        let el = match node.downcast::<Element>() {
-            Some(el) => Root::from_ref(el),
-            None => {
-                let parent = node.GetParentNode();
-                match parent.and_then(Root::downcast::<Element>) {
-                    Some(parent) => parent,
-                    None => return
-                }
-            },
-        };
-
-        // If the target is an iframe, forward the event to the child document.
-        if let Some(iframe) = el.downcast::<HTMLIFrameElement>() {
-            if let Some(pipeline_id) = iframe.pipeline_id() {
-                let rect = iframe.upcast::<Element>().GetBoundingClientRect();
-                let child_origin = Vector2D::new(rect.X() as f32, rect.Y() as f32);
-                let child_point = client_point - child_origin;
-
-                let event = CompositorEvent::TouchpadPressureEvent(child_point,
-                                                                   pressure,
-                                                                   phase_now);
-                let event = ScriptMsg::ForwardEvent(pipeline_id, event);
-                self.send_to_constellation(event);
-            }
-            return;
-        }
 
         let phase_before = self.touchpad_pressure_phase.get();
         self.touchpad_pressure_phase.set(phase_now);
@@ -1105,7 +1058,8 @@ impl Document {
     pub fn handle_mouse_move_event(&self,
                                    js_runtime: *mut JSRuntime,
                                    client_point: Option<Point2D<f32>>,
-                                   prev_mouse_over_target: &MutNullableJS<Element>) {
+                                   prev_mouse_over_target: &MutNullableJS<Element>,
+                                   node_address: Option<u64>) {
         let client_point = match client_point {
             None => {
                 // If there's no point, there's no target under the mouse
@@ -1116,31 +1070,22 @@ impl Document {
             Some(client_point) => client_point,
         };
 
-        let maybe_new_target = self.window.hit_test_query(client_point, true).and_then(|address| {
+        let maybe_new_target = node_address.and_then(|address| {
+            let address = UntrustedNodeAddress(address as *const c_void);
             let node = unsafe { node::from_untrusted_node_address(js_runtime, address) };
             node.inclusive_ancestors()
                 .filter_map(Root::downcast::<Element>)
                 .next()
         });
 
-        // Send mousemove event to topmost target, and forward it if it's an iframe
-        if let Some(ref new_target) = maybe_new_target {
-            // If the target is an iframe, forward the event to the child document.
-            if let Some(iframe) = new_target.downcast::<HTMLIFrameElement>() {
-                if let Some(pipeline_id) = iframe.pipeline_id() {
-                    let rect = iframe.upcast::<Element>().GetBoundingClientRect();
-                    let child_origin = Vector2D::new(rect.X() as f32, rect.Y() as f32);
-                    let child_point = client_point - child_origin;
+        // Send mousemove event to topmost target, unless it's an iframe, in which case the
+        // compositor should have also sent an event to the inner document.
+        let new_target = match maybe_new_target {
+            Some(ref target) => target,
+            None => return,
+        };
 
-                    let event = CompositorEvent::MouseMoveEvent(Some(child_point));
-                    let event = ScriptMsg::ForwardEvent(pipeline_id, event);
-                    self.send_to_constellation(event);
-                }
-                return;
-            }
-
-            self.fire_mouse_event(client_point, new_target.upcast(), "mousemove".to_owned());
-        }
+        self.fire_mouse_event(client_point, new_target.upcast(), "mousemove".to_owned());
 
         // Nothing more to do here, mousemove is sent,
         // and the element under the mouse hasn't changed.
@@ -1202,7 +1147,8 @@ impl Document {
                               js_runtime: *mut JSRuntime,
                               event_type: TouchEventType,
                               touch_id: TouchId,
-                              point: Point2D<f32>)
+                              point: Point2D<f32>,
+                              node_address: Option<u64>)
                               -> TouchEventResult {
         let TouchId(identifier) = touch_id;
 
@@ -1213,36 +1159,17 @@ impl Document {
             TouchEventType::Cancel => "touchcancel",
         };
 
-        let node = match self.window.hit_test_query(point, false) {
-            Some(node_address) => unsafe {
-                node::from_untrusted_node_address(js_runtime, node_address)
-            },
-            None => return TouchEventResult::Processed(false),
+        let el = node_address.and_then(|address| {
+            let address = UntrustedNodeAddress(address as *const c_void);
+            let node = unsafe { node::from_untrusted_node_address(js_runtime, address) };
+            node.inclusive_ancestors()
+                .filter_map(Root::downcast::<Element>)
+                .next()
+        });
+        let el = match el {
+            Some(el) => el,
+            None => return TouchEventResult::Forwarded,
         };
-        let el = match node.downcast::<Element>() {
-            Some(el) => Root::from_ref(el),
-            None => {
-                let parent = node.GetParentNode();
-                match parent.and_then(Root::downcast::<Element>) {
-                    Some(parent) => parent,
-                    None => return TouchEventResult::Processed(false),
-                }
-            },
-        };
-
-        // If the target is an iframe, forward the event to the child document.
-        if let Some(iframe) = el.downcast::<HTMLIFrameElement>() {
-            if let Some(pipeline_id) = iframe.pipeline_id() {
-                let rect = iframe.upcast::<Element>().GetBoundingClientRect();
-                let child_origin = Vector2D::new(rect.X() as f32, rect.Y() as f32);
-                let child_point = point - child_origin;
-
-                let event = CompositorEvent::TouchEvent(event_type, touch_id, child_point);
-                let event = ScriptMsg::ForwardEvent(pipeline_id, event);
-                self.send_to_constellation(event);
-            }
-            return TouchEventResult::Forwarded;
-        }
 
         let target = Root::upcast::<EventTarget>(el);
         let window = &*self.window;
@@ -3654,6 +3581,7 @@ impl DocumentMethods for Document {
         let point = &Point2D::new(x, y);
         let window = window_from_node(self);
         let viewport = window.window_size().unwrap().initial_viewport;
+        println!("element from point\n");
 
         if self.browsing_context().is_none() {
             return None;
@@ -3663,12 +3591,12 @@ impl DocumentMethods for Document {
             return None;
         }
 
-        match self.window.hit_test_query(*point, false) {
-            Some(untrusted_node_address) => {
+        println!("doing hit test\n");
+        match self.nodes_from_point(point, NodesFromPointQueryType::Topmost).first() {
+            Some(address) => {
                 let js_runtime = unsafe { JS_GetRuntime(window.get_cx()) };
-
                 let node = unsafe {
-                    node::from_untrusted_node_address(js_runtime, untrusted_node_address)
+                    node::from_untrusted_node_address(js_runtime, *address)
                 };
                 let parent_node = node.GetParentNode().unwrap();
                 let element_ref = node.downcast::<Element>().unwrap_or_else(|| {
@@ -3702,7 +3630,8 @@ impl DocumentMethods for Document {
         let js_runtime = unsafe { JS_GetRuntime(window.get_cx()) };
 
         // Step 1 and Step 3
-        let mut elements: Vec<Root<Element>> = self.nodes_from_point(point).iter()
+        let nodes = self.nodes_from_point(point, NodesFromPointQueryType::All);
+        let mut elements : Vec<Root<Element>> = nodes.iter()
             .flat_map(|&untrusted_node_address| {
                 let node = unsafe {
                     node::from_untrusted_node_address(js_runtime, untrusted_node_address)

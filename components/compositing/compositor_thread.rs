@@ -195,6 +195,7 @@ pub enum Msg {
     PendingPaintMetric(PipelineId, Epoch),
     /// The load of a page has completed
     LoadComplete(TopLevelBrowsingContextId),
+
 }
 
 impl Debug for Msg {
