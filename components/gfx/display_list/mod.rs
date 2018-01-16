@@ -33,8 +33,9 @@ use style::values::computed::Filter;
 use style_traits::cursor::Cursor;
 use text::TextRun;
 use text::glyph::ByteIndex;
-use webrender_api::{self, BoxShadowClipMode, ClipId, ColorF, GradientStop, LocalClip, MixBlendMode};
-use webrender_api::{ScrollPolicy, ScrollSensitivity, StickyOffsetBounds, TransformStyle};
+use webrender_api::{self, BoxShadowClipMode, ColorF, ExternalScrollId, GradientStop, LocalClip};
+use webrender_api::{MixBlendMode, ScrollPolicy, ScrollSensitivity, StickyOffsetBounds};
+use webrender_api::TransformStyle;
 
 pub use style::dom::OpaqueNode;
 
@@ -330,7 +331,7 @@ pub struct StickyFrameData {
 
 #[derive(Clone, Debug, Deserialize, MallocSizeOf, Serialize)]
 pub enum ClipScrollNodeType {
-    ScrollFrame(ScrollSensitivity),
+    ScrollFrame(ScrollSensitivity, ExternalScrollId),
     StickyFrame(StickyFrameData),
     Clip,
 }
@@ -338,10 +339,6 @@ pub enum ClipScrollNodeType {
 /// Defines a clip scroll node.
 #[derive(Clone, Debug, Deserialize, MallocSizeOf, Serialize)]
 pub struct ClipScrollNode {
-    /// The WebRender clip id of this scroll root based on the source of this clip
-    /// and information about the fragment.
-    pub id: Option<ClipId>,
-
     /// The index of the parent of this ClipScrollNode.
     pub parent_index: ClipScrollNodeIndex,
 
@@ -1115,7 +1112,7 @@ impl WebRenderImageInfo {
 }
 
 /// The type of the scroll offset list. This is only populated if WebRender is in use.
-pub type ScrollOffsetMap = HashMap<ClipId, Vector2D<f32>>;
+pub type ScrollOffsetMap = HashMap<ExternalScrollId, Vector2D<f32>>;
 
 
 pub trait SimpleMatrixDetection {

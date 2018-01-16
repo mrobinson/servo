@@ -60,7 +60,7 @@ use gfx::display_list::{OpaqueNode, WebRenderImageInfo};
 use gfx::font;
 use gfx::font_cache_thread::FontCacheThread;
 use gfx::font_context;
-use gfx_traits::{Epoch, node_id_from_clip_id};
+use gfx_traits::{Epoch, node_id_from_scroll_id};
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
 use ipc_channel::router::ROUTER;
 use layout::animation;
@@ -78,7 +78,7 @@ use layout::parallel;
 use layout::query::{LayoutRPCImpl, LayoutThreadData, process_content_box_request, process_content_boxes_request};
 use layout::query::{process_margin_style_query, process_node_overflow_request, process_resolved_style_request};
 use layout::query::{process_node_geometry_request, process_node_scroll_area_request};
-use layout::query::{process_node_scroll_root_id_request, process_offset_parent_query};
+use layout::query::{process_node_scroll_id_request, process_offset_parent_query};
 use layout::sequential;
 use layout::traversal::{ComputeStackingRelativePositions, PreorderFlowTraversal, RecalcStyleAndConstructFlows};
 use layout::wrapper::LayoutNodeLayoutData;
@@ -518,7 +518,7 @@ impl LayoutThread {
                     content_box_response: None,
                     content_boxes_response: Vec::new(),
                     client_rect_response: Rect::zero(),
-                    scroll_root_id_response: None,
+                    scroll_id_response: None,
                     scroll_area_response: Rect::zero(),
                     overflow_response: NodeOverflowResponse(None),
                     resolved_style_response: String::new(),
@@ -702,13 +702,13 @@ impl LayoutThread {
             }
             Msg::UpdateScrollStateFromScript(state) => {
                 let mut rw_data = possibly_locked_rw_data.lock();
-                rw_data.scroll_offsets.insert(state.scroll_root_id, state.scroll_offset);
+                rw_data.scroll_offsets.insert(state.scroll_id, state.scroll_offset);
 
                 let point = Point2D::new(-state.scroll_offset.x, -state.scroll_offset.y);
                 self.webrender_api.scroll_node_with_id(
                     self.webrender_document,
                     webrender_api::LayoutPoint::from_untyped(&point),
-                    state.scroll_root_id,
+                    webrender_api::IdType::ExternalScrollId(state.scroll_id),
                     webrender_api::ScrollClamping::ToContentBounds
                 );
             }
@@ -1095,8 +1095,8 @@ impl LayoutThread {
                     ReflowGoal::NodeOverflowQuery(_) => {
                         rw_data.overflow_response = NodeOverflowResponse(None);
                     },
-                    ReflowGoal::NodeScrollRootIdQuery(_) => {
-                        rw_data.scroll_root_id_response = None;
+                    ReflowGoal::NodeScrollIdQuery(_) => {
+                        rw_data.scroll_id_response = None;
                     },
                     ReflowGoal::ResolvedStyleQuery(_, _, _) => {
                         rw_data.resolved_style_response = String::new();
@@ -1383,10 +1383,9 @@ impl LayoutThread {
                 let node = unsafe { ServoLayoutNode::new(&node) };
                 rw_data.overflow_response = process_node_overflow_request(node);
             },
-            ReflowGoal::NodeScrollRootIdQuery(node) => {
+            ReflowGoal::NodeScrollIdQuery(node) => {
                 let node = unsafe { ServoLayoutNode::new(&node) };
-                rw_data.scroll_root_id_response = Some(process_node_scroll_root_id_request(self.id,
-                                                                                           node));
+                rw_data.scroll_id_response = Some(process_node_scroll_id_request(self.id, node));
             },
             ReflowGoal::ResolvedStyleQuery(node, ref pseudo, ref property) => {
                 let node = unsafe { ServoLayoutNode::new(&node) };
@@ -1438,16 +1437,14 @@ impl LayoutThread {
         let mut rw_data = possibly_locked_rw_data.lock();
         let mut script_scroll_states = vec![];
         let mut layout_scroll_states = HashMap::new();
-        for new_scroll_state in &new_scroll_states {
-            let offset = new_scroll_state.scroll_offset;
-            layout_scroll_states.insert(new_scroll_state.scroll_root_id, offset);
+        for new_state in &new_scroll_states {
+            let offset = new_state.scroll_offset;
+            layout_scroll_states.insert(new_state.scroll_id, offset);
 
-            if new_scroll_state.scroll_root_id.is_root_scroll_node() {
+            if new_state.scroll_id.is_root() {
                 script_scroll_states.push((UntrustedNodeAddress::from_id(0), offset))
-            } else if let Some(id) = new_scroll_state.scroll_root_id.external_id() {
-                if let Some(node_id) = node_id_from_clip_id(id as usize) {
-                    script_scroll_states.push((UntrustedNodeAddress::from_id(node_id), offset))
-                }
+            } else if let Some(node_id) = node_id_from_scroll_id(new_state.scroll_id.0 as usize) {
+                script_scroll_states.push((UntrustedNodeAddress::from_id(node_id), offset))
             }
         }
         let _ = self.script_chan

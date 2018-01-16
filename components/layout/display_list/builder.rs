@@ -76,8 +76,9 @@ use style_traits::CSSPixel;
 use style_traits::ToCss;
 use style_traits::cursor::Cursor;
 use table_cell::CollapsedBordersForCell;
-use webrender_api::{BoxShadowClipMode, ClipId, ClipMode, ColorF, ComplexClipRegion, LineStyle};
-use webrender_api::{LocalClip, RepeatMode, ScrollPolicy, ScrollSensitivity, StickyOffsetBounds};
+use webrender_api::{BoxShadowClipMode, ClipMode, ColorF, ComplexClipRegion, ExternalScrollId};
+use webrender_api::{LineStyle, LocalClip, RepeatMode, ScrollPolicy, ScrollSensitivity};
+use webrender_api::StickyOffsetBounds;
 
 trait ResolvePercentage {
     fn resolve(&self, length: u32) -> u32;
@@ -253,11 +254,13 @@ impl StackingContextCollectionState {
         // This is just a dummy node to take up a slot in the array. WebRender
         // takes care of adding this root node and it can be ignored during DL conversion.
         let root_node = ClipScrollNode {
-            id: Some(ClipId::root_scroll_node(pipeline_id.to_webrender())),
             parent_index: ClipScrollNodeIndex(0),
             clip: ClippingRegion::from_rect(&TypedRect::zero()),
             content_rect: Rect::zero(),
-            node_type: ClipScrollNodeType::ScrollFrame(ScrollSensitivity::ScriptAndInputEvents),
+            node_type: ClipScrollNodeType::ScrollFrame(
+                ScrollSensitivity::ScriptAndInputEvents,
+                pipeline_id.root_scroll_id(),
+            ),
         };
 
         StackingContextCollectionState {
@@ -2690,7 +2693,6 @@ impl BlockFlowDisplayListBuilding for BlockFlow {
         };
 
         let new_clip_scroll_index = state.add_clip_scroll_node(ClipScrollNode {
-            id: None,
             parent_index: self.clipping_and_scrolling().scrolling,
             clip: ClippingRegion::from_rect(border_box),
             content_rect: Rect::zero(),
@@ -2723,12 +2725,6 @@ impl BlockFlowDisplayListBuilding for BlockFlow {
             return;
         }
 
-        // If we already have a scroll root for this flow, just return. This can happen
-        // when fragments map to more than one flow, such as in the case of table
-        // wrappers. We just accept the first scroll root in that case.
-        let new_clip_scroll_node_id =
-            ClipId::new(self.fragment.unique_id(), state.pipeline_id.to_webrender());
-
         let sensitivity = if StyleOverflow::Hidden == self.fragment.style.get_box().overflow_x &&
             StyleOverflow::Hidden == self.fragment.style.get_box().overflow_y
         {
@@ -2747,12 +2743,15 @@ impl BlockFlowDisplayListBuilding for BlockFlow {
         let content_size = self.base.overflow.scroll.origin + self.base.overflow.scroll.size;
         let content_size = Size2D::new(content_size.x, content_size.y);
 
+        let external_id = ExternalScrollId(
+            self.fragment.unique_id(),
+            state.pipeline_id.to_webrender()
+        );
         let new_clip_scroll_index = state.add_clip_scroll_node(ClipScrollNode {
-            id: Some(new_clip_scroll_node_id),
             parent_index: self.clipping_and_scrolling().scrolling,
             clip: clip,
             content_rect: Rect::new(content_box.origin, content_size),
-            node_type: ClipScrollNodeType::ScrollFrame(sensitivity),
+            node_type: ClipScrollNodeType::ScrollFrame(sensitivity, external_id),
         });
 
         let new_clipping_and_scrolling = ClippingAndScrolling::simple(new_clip_scroll_index);
@@ -2801,7 +2800,6 @@ impl BlockFlowDisplayListBuilding for BlockFlow {
         preserved_state.push_clip(state, &clip_rect, self.positioning());
 
         let new_index = state.add_clip_scroll_node(ClipScrollNode {
-            id: None,
             parent_index: self.clipping_and_scrolling().scrolling,
             clip: ClippingRegion::from_rect(&clip_rect),
             content_rect: Rect::zero(), // content_rect isn't important for clips.

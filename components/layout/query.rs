@@ -17,7 +17,7 @@ use msg::constellation_msg::PipelineId;
 use opaque_node::OpaqueNodeMethods;
 use script_layout_interface::rpc::{ContentBoxResponse, ContentBoxesResponse, LayoutRPC};
 use script_layout_interface::rpc::{MarginStyleResponse, NodeGeometryResponse};
-use script_layout_interface::rpc::{NodeOverflowResponse, NodeScrollRootIdResponse};
+use script_layout_interface::rpc::{NodeOverflowResponse, NodeScrollIdResponse};
 use script_layout_interface::rpc::{OffsetParentResponse, ResolvedStyleResponse, TextIndexResponse};
 use script_layout_interface::wrapper_traits::{LayoutNode, ThreadSafeLayoutElement, ThreadSafeLayoutNode};
 use script_traits::LayoutMsg as ConstellationMsg;
@@ -34,7 +34,7 @@ use style::logical_geometry::{WritingMode, BlockFlowDirection, InlineBaseDirecti
 use style::properties::{style_structs, PropertyId, PropertyDeclarationId, LonghandId};
 use style::selector_parser::PseudoElement;
 use style_traits::ToCss;
-use webrender_api::ClipId;
+use webrender_api::ExternalScrollId;
 use wrapper::LayoutNodeLayoutData;
 
 /// Mutable data belonging to the LayoutThread.
@@ -56,8 +56,8 @@ pub struct LayoutThreadData {
     /// A queued response for the client {top, left, width, height} of a node in pixels.
     pub client_rect_response: Rect<i32>,
 
-    /// A queued response for the scroll root id for a given node.
-    pub scroll_root_id_response: Option<ClipId>,
+    /// A queued response for the scroll id for a given node.
+    pub scroll_id_response: Option<ExternalScrollId>,
 
     /// A pair of overflow property in x and y
     pub overflow_response: NodeOverflowResponse,
@@ -138,10 +138,10 @@ impl LayoutRPC for LayoutRPCImpl {
         }
     }
 
-    fn node_scroll_root_id(&self) -> NodeScrollRootIdResponse {
-        NodeScrollRootIdResponse(self.0.lock()
-                                       .unwrap().scroll_root_id_response
-                                       .expect("scroll_root_id is not correctly fetched"))
+    fn node_scroll_id(&self) -> NodeScrollIdResponse {
+        NodeScrollIdResponse(self.0.lock()
+                             .unwrap().scroll_id_response
+                             .expect("scroll id is not correctly fetched"))
     }
 
     /// Retrieves the resolved value for a CSS style property.
@@ -618,11 +618,12 @@ pub fn process_node_geometry_request<N: LayoutNode>(requested_node: N, layout_ro
     iterator.client_rect
 }
 
-pub fn process_node_scroll_root_id_request<N: LayoutNode>(id: PipelineId,
-                                                          requested_node: N)
-                                                          -> ClipId {
+pub fn process_node_scroll_id_request<N: LayoutNode>(
+    id: PipelineId,
+    requested_node: N
+) -> ExternalScrollId {
     let layout_node = requested_node.to_threadsafe();
-    layout_node.generate_scroll_root_id(id)
+    layout_node.generate_scroll_id(id)
 }
 
 pub fn process_node_scroll_area_request< N: LayoutNode>(requested_node: N, layout_root: &mut Flow)
