@@ -4,6 +4,8 @@
 
 //! Selecting the default global allocator for Servo
 
+#![feature(lang_items)]
+
 #![cfg_attr(feature = "unstable", feature(global_allocator, allocator_api, alloc_system))]
 
 #[cfg(feature = "unstable")]
@@ -93,11 +95,6 @@ mod platform {
                           new_size: usize) -> *mut Opaque {
             let flags = layout_to_flags(layout.align(), new_size);
             ffi::rallocx(ptr as *mut _, new_size, flags) as *mut Opaque
-        }
-
-        #[inline]
-        fn oom(&self) -> ! {
-            System.oom()
         }
     }
 }

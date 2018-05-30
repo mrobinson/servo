@@ -8,6 +8,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+#![feature(macro_at_most_once_rep)]
+
 pub mod alloc;
 pub mod hash_map;
 pub mod hash_set;
