@@ -4,9 +4,8 @@
 
 //! CSS transitions and animations.
 
-use crate::display_list::items::OpaqueNode;
-use crate::flow::{Flow, GetBaseFlow};
 use crate::opaque_node::OpaqueNodeMethods;
+use crate::FragmentTreeRoot;
 use fxhash::{FxHashMap, FxHashSet};
 use ipc_channel::ipc::IpcSender;
 use msg::constellation_msg::PipelineId;
@@ -14,6 +13,7 @@ use script_traits::{
     AnimationState, ConstellationControlMsg, LayoutMsg as ConstellationMsg, UntrustedNodeAddress,
 };
 use style::animation::{Animation, ElementAnimationState};
+use style::dom::OpaqueNode;
 
 /// Processes any new animations that were discovered after style recalculation and
 /// remove animations for any disconnected nodes. Send messages that trigger events
@@ -25,13 +25,13 @@ pub fn do_post_style_animations_update(
     pipeline_id: PipelineId,
     now: f64,
     out: Option<&mut Vec<UntrustedNodeAddress>>,
-    root_flow: &mut dyn Flow,
+    root: &FragmentTreeRoot,
 ) {
     let had_running_animations = animation_states
         .values()
         .any(|state| !state.running_animations.is_empty());
 
-    cancel_animations_for_disconnected_nodes(animation_states, root_flow);
+    cancel_animations_for_disconnected_nodes(animation_states, root);
     collect_newly_animating_nodes(animation_states, out);
 
     let send_event = |animation: &Animation, event_type, elapsed_time| {
@@ -101,19 +101,16 @@ pub fn collect_newly_animating_nodes(
 /// This also doesn't yet handles nodes that have been reparented.
 pub fn cancel_animations_for_disconnected_nodes(
     animation_states: &mut FxHashMap<OpaqueNode, ElementAnimationState>,
-    root_flow: &mut dyn Flow,
+    root: &FragmentTreeRoot,
 ) {
     // Assume all nodes have been removed until proven otherwise.
     let mut invalid_nodes: FxHashSet<OpaqueNode> = animation_states.keys().cloned().collect();
-    fn traverse_flow(flow: &mut dyn Flow, invalid_nodes: &mut FxHashSet<OpaqueNode>) {
-        flow.mutate_fragments(&mut |fragment| {
-            invalid_nodes.remove(&fragment.node);
-        });
-        for kid in flow.mut_base().children.iter_mut() {
-            traverse_flow(kid, invalid_nodes)
+    root.find(|fragment, _| -> Option<()> {
+        if let Some(tag) = fragment.tag().as_ref() {
+            invalid_nodes.remove(tag);
         }
-    }
-    traverse_flow(root_flow, &mut invalid_nodes);
+        None
+    });
 
     // Cancel animations for any nodes that are no longer in the flow tree.
     for node in &invalid_nodes {

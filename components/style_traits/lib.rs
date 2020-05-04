@@ -256,3 +256,39 @@ pub trait SpeculativePainter: Send + Sync {
         arguments: Vec<String>,
     );
 }
+
+/// The type of transition event to trigger. These are defined by
+/// CSS Transitions § 6.1 and CSS Animations § 4.2
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum TransitionOrAnimationEventType {
+    /// "The transitionrun event occurs when a transition is created (i.e., when it
+    /// is added to the set of running transitions)."
+    TransitionRun,
+    /// "The transitionend event occurs at the completion of the transition. In the
+    /// case where a transition is removed before completion, such as if the
+    /// transition-property is removed, then the event will not fire."
+    TransitionEnd,
+    /// "The transitioncancel event occurs when a transition is canceled."
+    TransitionCancel,
+    /// "The animationend event occurs when the animation finishes"
+    AnimationEnd,
+}
+
+impl TransitionOrAnimationEventType {
+    /// Whether or not this event finalizes the animation or transition. During finalization
+    /// the DOM object associated with this transition or animation is unrooted.
+    pub fn finalizes_transition_or_animation(&self) -> bool {
+        match *self {
+            Self::TransitionEnd | Self::TransitionCancel | Self::AnimationEnd => true,
+            Self::TransitionRun => false,
+        }
+    }
+
+    /// Whether or not this event is a transition-related event.
+    pub fn is_transition_event(&self) -> bool {
+        match *self {
+            Self::TransitionRun | Self::TransitionEnd | Self::TransitionCancel => true,
+            Self::AnimationEnd => false,
+        }
+    }
+}

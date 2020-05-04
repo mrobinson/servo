@@ -33,6 +33,7 @@ use gfx::font_context;
 use gfx_traits::{node_id_from_scroll_id, Epoch};
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
 use ipc_channel::router::ROUTER;
+use layout::animation;
 use layout::context::LayoutContext;
 use layout::display_list::{DisplayListBuilder, WebRenderImageInfo};
 use layout::layout_debug;
@@ -81,10 +82,11 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
+use style::animation::ElementAnimationState;
 use style::context::{
     QuirksMode, RegisteredSpeculativePainter, RegisteredSpeculativePainters, SharedStyleContext,
 };
-use style::dom::{TDocument, TElement, TNode};
+use style::dom::{OpaqueNode, TDocument, TElement, TNode};
 use style::driver;
 use style::error_reporting::RustLogReporter;
 use style::global_style_data::{GLOBAL_STYLE_DATA, STYLE_THREAD_POOL};
@@ -170,6 +172,9 @@ pub struct LayoutThread {
 
     /// The document-specific shared lock used for author-origin stylesheets
     document_shared_lock: Option<SharedRwLock>,
+
+    /// The animation state for all of our nodes.
+    animation_states: ServoArc<RwLock<FxHashMap<OpaqueNode, ElementAnimationState>>>,
 
     /// A counter for epoch messages
     epoch: Cell<Epoch>,
@@ -522,6 +527,7 @@ impl LayoutThread {
             box_tree_root: Default::default(),
             fragment_tree_root: Default::default(),
             document_shared_lock: None,
+            animation_states: ServoArc::new(RwLock::new(Default::default())),
             // Epoch starts at 1 because of the initial display list for epoch 0 that we send to WR
             epoch: Cell::new(Epoch(1)),
             viewport_size: Size2D::new(Au(0), Au(0)),
@@ -592,9 +598,9 @@ impl LayoutThread {
                 options: GLOBAL_STYLE_DATA.options.clone(),
                 guards,
                 visited_styles_enabled: false,
-                animation_states: Default::default(),
+                animation_states: self.animation_states.clone(),
                 registered_speculative_painters: &self.registered_painters,
-                timer: self.timer.clone(),
+                current_time_for_animations: self.timer.seconds(),
                 traversal_flags: TraversalFlags::empty(),
                 snapshot_map: snapshot_map,
             },
@@ -603,6 +609,11 @@ impl LayoutThread {
             webrender_image_cache: self.webrender_image_cache.clone(),
             pending_images: if script_initiated_layout {
                 Some(Mutex::new(Vec::new()))
+            } else {
+                None
+            },
+            newly_animating_nodes: if script_initiated_layout {
+                Some(Mutex::new(vec![]))
             } else {
                 None
             },
@@ -1159,6 +1170,7 @@ impl LayoutThread {
                 root.clone(),
                 &data.reflow_goal,
                 Some(&document),
+                &mut rw_data,
                 &mut layout_context,
             );
         }
@@ -1184,6 +1196,13 @@ impl LayoutThread {
             None => Vec::new(),
         };
         reflow_result.pending_images = pending_images;
+
+        let newly_animating_nodes = match context.newly_animating_nodes {
+            Some(ref nodes) => std::mem::replace(&mut *nodes.lock().unwrap(), vec![]),
+            None => vec![],
+        };
+        reflow_result.newly_animating_nodes = newly_animating_nodes;
+
         match *reflow_goal {
             ReflowGoal::LayoutQuery(ref querymsg, _) => match querymsg {
                 &QueryMsg::ContentBoxQuery(node) => {
@@ -1293,8 +1312,26 @@ impl LayoutThread {
         fragment_tree: Arc<FragmentTreeRoot>,
         reflow_goal: &ReflowGoal,
         document: Option<&ServoLayoutDocument>,
+        rw_data: &mut LayoutThreadData,
         context: &mut LayoutContext,
     ) {
+        {
+            let mut newly_animating_nodes = context
+                .newly_animating_nodes
+                .as_ref()
+                .map(|nodes| nodes.lock().unwrap());
+            let newly_animating_nodes = newly_animating_nodes.as_mut().map(|nodes| &mut **nodes);
+            animation::do_post_style_animations_update(
+                &rw_data.constellation_chan,
+                &self.script_chan,
+                &mut *(self.animation_states.write()),
+                self.id,
+                context.style_context.current_time_for_animations,
+                newly_animating_nodes,
+                &fragment_tree,
+            );
+        }
+
         if self.trace_layout {
             if let Some(box_tree) = &*self.box_tree_root.borrow() {
                 layout_debug::begin_trace(box_tree.clone(), fragment_tree.clone());

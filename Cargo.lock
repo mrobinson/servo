@@ -2837,6 +2837,7 @@ dependencies = [
  "embedder_traits",
  "euclid",
  "fnv",
+ "fxhash",
  "gfx",
  "gfx_traits",
  "html5ever",

@@ -141,8 +141,8 @@ use script_traits::{
     LayoutMsg, LoadData, LoadOrigin, MediaSessionActionType, MouseButton, MouseEventType,
     NewLayoutInfo, Painter, ProgressiveWebMetricType, ScriptMsg, ScriptThreadFactory,
     ScriptToConstellationChan, StructuredSerializedData, TimerSchedulerMsg, TouchEventType,
-    TouchId, TransitionOrAnimationEventType, UntrustedNodeAddress, UpdatePipelineIdReason,
-    WebrenderIpcSender, WheelDelta, WindowSizeData, WindowSizeType,
+    TouchId, UntrustedNodeAddress, UpdatePipelineIdReason, WebrenderIpcSender, WheelDelta,
+    WindowSizeData, WindowSizeType,
 };
 use servo_atoms::Atom;
 use servo_config::opts;
@@ -163,6 +163,7 @@ use std::thread;
 use std::time::{Duration, SystemTime};
 use style::dom::OpaqueNode;
 use style::thread_state::{self, ThreadState};
+use style_traits::TransitionOrAnimationEventType;
 use time::{at_utc, get_time, precise_time_ns, Timespec};
 use url::Position;
 use webrender_api::units::LayoutPixel;

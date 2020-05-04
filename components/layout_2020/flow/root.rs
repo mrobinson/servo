@@ -237,7 +237,7 @@ impl FragmentTreeRoot {
         ))
     }
 
-    fn find<T>(
+    pub(crate) fn find<T>(
         &self,
         mut process_func: impl FnMut(&Fragment, &PhysicalRect<Length>) -> Option<T>,
     ) -> Option<T> {

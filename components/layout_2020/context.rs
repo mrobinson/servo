@@ -12,6 +12,7 @@ use net_traits::image_cache::{CanRequestImages, ImageCache, ImageCacheResult};
 use net_traits::image_cache::{ImageOrMetadataAvailable, UsePlaceholder};
 use parking_lot::RwLock;
 use script_layout_interface::{PendingImage, PendingImageState};
+use script_traits::UntrustedNodeAddress;
 use servo_url::{ImmutableOrigin, ServoUrl};
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
@@ -35,6 +36,10 @@ pub struct LayoutContext<'a> {
     /// A list of in-progress image loads to be shared with the script thread.
     /// A None value means that this layout was not initiated by the script thread.
     pub pending_images: Option<Mutex<Vec<PendingImage>>>,
+
+    /// A list of nodes that have just initiated a CSS transition or animation.
+    /// A None value means that this layout was not initiated by the script thread.
+    pub newly_animating_nodes: Option<Mutex<Vec<UntrustedNodeAddress>>>,
 
     pub webrender_image_cache:
         Arc<RwLock<FnvHashMap<(ServoUrl, UsePlaceholder), WebRenderImageInfo>>>,

@@ -25,6 +25,7 @@ use crate::values::generics::easing::{StepPosition, TimingFunction as GenericTim
 use crate::Atom;
 use servo_arc::Arc;
 use std::fmt;
+use style_traits::TransitionOrAnimationEventType;
 
 /// This structure represents a keyframes animation current iteration state.
 ///
@@ -613,6 +614,100 @@ impl ElementAnimationState {
             match *animation {
                 Animation::Keyframes(_, _, _, ref mut state) => state.iterate_if_necessary(time),
                 _ => {},
+            }
+        }
+    }
+
+    /// Process this animation state post-style and trigger appropriate event
+    /// for transition and animation state changes.
+    pub fn process_post_style(
+        &mut self,
+        now: f64,
+        mut send_event: impl FnMut(&Animation, TransitionOrAnimationEventType, f64),
+    ) {
+        self.process_cancelled_animations_post_style(now, &mut send_event);
+        self.process_running_animations_post_style(now, &mut send_event);
+        self.process_new_animations_post_style(&mut send_event);
+    }
+
+    /// Walk through the list of of new animations after a restyle and send events for
+    /// them before adding them to the list of running animations.
+    pub fn process_new_animations_post_style(
+        &mut self,
+        mut send_event: impl FnMut(&Animation, TransitionOrAnimationEventType, f64),
+    ) {
+        for animation in self.new_animations.drain(..) {
+            match animation {
+                Animation::Transition(..) => {
+                    // TODO(mrobinson): We need to properly compute the elapsed_time here
+                    // according to https://drafts.csswg.org/css-transitions/#event-transitionevent
+                    send_event(
+                        &animation,
+                        TransitionOrAnimationEventType::TransitionRun,
+                        0.,
+                    )
+                },
+                Animation::Keyframes(..) => {},
+            }
+            self.running_animations.push(animation);
+        }
+    }
+
+    /// Send events for cancelled animations. Currently this only handles cancelled
+    /// transitions, but eventually this should handle cancelled CSS animations as
+    /// well.
+    pub fn process_cancelled_animations_post_style(
+        &mut self,
+        now: f64,
+        mut send_event: impl FnMut(&Animation, TransitionOrAnimationEventType, f64),
+    ) {
+        for animation in self.cancelled_animations.drain(..) {
+            match animation {
+                Animation::Transition(_, start_time, _) => {
+                    // TODO(mrobinson): We need to properly compute the elapsed_time here
+                    // according to https://drafts.csswg.org/css-transitions/#event-transitionevent
+                    send_event(
+                        &animation,
+                        TransitionOrAnimationEventType::TransitionCancel,
+                        (now - start_time).max(0.),
+                    );
+                },
+                // TODO(mrobinson): We should send animationcancel events.
+                Animation::Keyframes(..) => {},
+            }
+        }
+    }
+
+    /// Walk through the list of running animations and remove all of the ones that
+    /// have ended.
+    pub fn process_running_animations_post_style(
+        &mut self,
+        now: f64,
+        mut send_event: impl FnMut(&Animation, TransitionOrAnimationEventType, f64),
+    ) {
+        if self.running_animations.is_empty() {
+            return;
+        }
+
+        let mut running_animations = std::mem::replace(&mut self.running_animations, Vec::new());
+        for running_animation in running_animations.drain(..) {
+            // If the animation is still running, add it back to the list of running animations.
+            if !running_animation.has_ended(now) {
+                self.running_animations.push(running_animation);
+            } else {
+                let (event_type, elapsed_time) = match running_animation {
+                    Animation::Transition(_, _, ref property_animation) => (
+                        TransitionOrAnimationEventType::TransitionEnd,
+                        property_animation.duration,
+                    ),
+                    Animation::Keyframes(_, _, _, ref state) => (
+                        TransitionOrAnimationEventType::AnimationEnd,
+                        state.active_duration(),
+                    ),
+                };
+
+                send_event(&running_animation, event_type, elapsed_time);
+                self.finished_animations.push(running_animation);
             }
         }
     }

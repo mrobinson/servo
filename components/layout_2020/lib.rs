@@ -7,6 +7,7 @@
 #[macro_use]
 extern crate serde;
 
+pub mod animation;
 mod cell;
 pub mod context;
 pub mod data;
