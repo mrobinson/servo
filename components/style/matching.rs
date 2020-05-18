@@ -234,17 +234,16 @@ trait PrivateMatchMethods: TElement {
         Some(style.0)
     }
 
-    #[cfg(feature = "gecko")]
     fn needs_animations_update(
         &self,
         context: &mut StyleContext<Self>,
         old_style: Option<&ComputedValues>,
         new_style: &ComputedValues,
+        has_animations: bool,
     ) -> bool {
         let new_box_style = new_style.get_box();
         let new_style_specifies_animations = new_box_style.specifies_animations();
 
-        let has_animations = self.has_css_animations();
         if !new_style_specifies_animations && !has_animations {
             return false;
         }
@@ -372,7 +371,12 @@ trait PrivateMatchMethods: TElement {
         // in addition to the unvisited styles.
 
         let mut tasks = UpdateAnimationsTasks::empty();
-        if self.needs_animations_update(context, old_values.as_ref().map(|s| &**s), new_values) {
+        if self.needs_animations_update(
+            context,
+            old_values.as_ref().map(|s| &**s),
+            new_values,
+            self.has_css_animations(&context.shared),
+        ) {
             tasks.insert(UpdateAnimationsTasks::CSS_ANIMATIONS);
         }
 
@@ -440,35 +444,49 @@ trait PrivateMatchMethods: TElement {
     ) {
         let this_opaque = self.as_node().opaque();
         let shared_context = context.shared;
-        let mut animation_states = shared_context.animation_states.write();
-        let mut animation_state = animation_states.remove(&this_opaque).unwrap_or_default();
+        let mut animation_set = shared_context
+            .animation_states
+            .write()
+            .remove(&this_opaque)
+            .unwrap_or_default();
 
-        animation_state.update_animations_for_new_style(*self, &shared_context, &new_values);
+        let needs_animations_update = self.needs_animations_update(
+            context,
+            old_values.as_ref().map(|s| &**s),
+            new_values,
+            animation_set.has_active_animation(),
+        );
 
-        animation_state.update_transitions_for_new_style::<Self>(
+        animation_set.update_animations_for_new_style::<Self>(
+            *self,
+            &shared_context,
+            &new_values,
+            &context.thread_local.font_metrics_provider,
+            needs_animations_update,
+        );
+
+        animation_set.update_transitions_for_new_style(
             &shared_context,
             this_opaque,
             old_values.as_ref(),
             new_values,
-            &context.thread_local.font_metrics_provider,
         );
 
-        animation_state.apply_active_animations::<Self>(
-            shared_context,
-            new_values,
-            &context.thread_local.font_metrics_provider,
-        );
+        animation_set.apply_active_animations(shared_context, new_values);
 
         // We clear away any finished transitions, but retain animations, because they
         // might still be used for proper calculation of `animation-fill-mode`.
-        animation_state
+        animation_set
             .transitions
             .retain(|transition| transition.state != AnimationState::Finished);
 
         // If the ElementAnimationSet is empty, and don't store it in order to
         // save memory and to avoid extra processing later.
-        if !animation_state.is_empty() {
-            animation_states.insert(this_opaque, animation_state);
+        if !animation_set.is_empty() {
+            shared_context
+                .animation_states
+                .write()
+                .insert(this_opaque, animation_set);
         }
     }
 

@@ -572,7 +572,13 @@ impl LayoutThread {
         snapshot_map: &'a SnapshotMap,
         origin: ImmutableOrigin,
         animation_timeline_value: f64,
+        stylesheets_changed: bool,
     ) -> LayoutContext<'a> {
+        let traversal_flags = match stylesheets_changed {
+            true => TraversalFlags::ForCSSRuleChanges,
+            false => TraversalFlags::empty(),
+        };
+
         LayoutContext {
             id: self.id,
             origin,
@@ -584,7 +590,7 @@ impl LayoutThread {
                 animation_states: Default::default(),
                 registered_speculative_painters: &self.registered_painters,
                 current_time_for_animations: animation_timeline_value,
-                traversal_flags: TraversalFlags::empty(),
+                traversal_flags,
                 snapshot_map: snapshot_map,
             },
             image_cache: self.image_cache.clone(),
@@ -1062,8 +1068,13 @@ impl LayoutThread {
         self.stylist.flush(&guards, Some(element), Some(&map));
 
         // Create a layout context for use throughout the following passes.
-        let mut layout_context =
-            self.build_layout_context(guards.clone(), &map, origin, data.animation_timeline_value);
+        let mut layout_context = self.build_layout_context(
+            guards.clone(),
+            &map,
+            origin,
+            data.animation_timeline_value,
+            data.stylesheets_changed,
+        );
 
         let traversal = RecalcStyle::new(layout_context);
         let token = {
