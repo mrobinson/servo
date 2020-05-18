@@ -1738,7 +1738,7 @@ impl Window {
             }
         }
 
-        let update = document.update_animations();
+        let update = document.update_animations_post_reflow();
         unsafe {
             ScriptThread::process_animations_update(update);
         }

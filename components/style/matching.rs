@@ -450,20 +450,23 @@ trait PrivateMatchMethods: TElement {
             .remove(&this_opaque)
             .unwrap_or_default();
 
+        // Updating animations is expensive, because we have to recalculate the style
+        // for all the keyframes. We only want to do this if we think that there's a
+        // chance that the animations really changed.
         let needs_animations_update = self.needs_animations_update(
             context,
             old_values.as_ref().map(|s| &**s),
             new_values,
             animation_set.has_active_animation(),
         );
-
-        animation_set.update_animations_for_new_style::<Self>(
-            *self,
-            &shared_context,
-            &new_values,
-            &context.thread_local.font_metrics_provider,
-            needs_animations_update,
-        );
+        if needs_animations_update {
+            animation_set.update_animations_for_new_style::<Self>(
+                *self,
+                &shared_context,
+                &new_values,
+                &context.thread_local.font_metrics_provider,
+            );
+        }
 
         animation_set.update_transitions_for_new_style(
             &shared_context,

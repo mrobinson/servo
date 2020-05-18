@@ -156,12 +156,10 @@ pub enum AnimationState {
 /// have to keep track the current iteration and the max iteration count.
 #[derive(Clone, Debug, MallocSizeOf)]
 pub enum KeyframesIterationState {
-    /// Infinite iterations, so no need to track a state.
-    Infinite,
+    /// Infinite iterations with the current iteration count.
+    Infinite(f64),
     /// Current and max iterations.
-    /// TODO: Everything else in this file uses f64, so perhaps this should
-    /// be as well.
-    Finite(f32, f32),
+    Finite(f64, f64),
 }
 
 /// A single computed keyframe for a CSS Animation.
@@ -329,26 +327,26 @@ impl Animation {
 
     /// Given the current time, advances this animation to the next iteration,
     /// updates times, and then toggles the direction if appropriate. Otherwise
-    /// does nothing.
-    pub fn iterate_if_necessary(&mut self, time: f64) {
+    /// does nothing. Returns true if this animation has iterated.
+    pub fn iterate_if_necessary(&mut self, time: f64) -> bool {
         if !self.iteration_over(time) {
-            return;
+            return false;
         }
 
         // Only iterate animations that are currently running.
         if self.state != AnimationState::Running {
-            return;
+            return false;
         }
 
         if let KeyframesIterationState::Finite(ref mut current, max) = self.iteration_state {
-            // If we are already on the final iteration, just exit now.
-            // NB: This prevent us from updating the direction, which might be
-            // needed for the correct handling of animation-fill-mode.
-            if (max - *current) <= 1.0 {
-                return;
+            // If we are already on the final iteration, just exit now. This prevents
+            // us from updating the direction, which might be needed for the correct
+            // handling of animation-fill-mode and also firing animationiteration events
+            // at the end of animations.
+            *current = (*current + 1.).min(max);
+            if *current == max {
+                return false;
             }
-
-            *current += 1.0;
         }
 
         // Update the next iteration direction if applicable.
@@ -364,6 +362,8 @@ impl Animation {
             },
             _ => {},
         }
+
+        true
     }
 
     fn iteration_over(&self, time: f64) -> bool {
@@ -387,8 +387,8 @@ impl Animation {
         // If we have a limited number of iterations and we cannot advance to another
         // iteration, then we have ended.
         return match self.iteration_state {
-            KeyframesIterationState::Finite(current, max) if (max - current) <= 1.0 => true,
-            KeyframesIterationState::Finite(..) | KeyframesIterationState::Infinite => false,
+            KeyframesIterationState::Finite(current, max) => max == current,
+            KeyframesIterationState::Infinite(..) => false,
         };
     }
 
@@ -449,13 +449,11 @@ impl Animation {
     }
 
     /// Calculate the active-duration of this animation according to
-    /// https://drafts.csswg.org/css-animations/#active-duration. active-duration
-    /// is not really meaningful for infinite animations so we just return 0
-    /// here in that case.
+    /// https://drafts.csswg.org/css-animations/#active-duration.
     pub fn active_duration(&self) -> f64 {
         match self.iteration_state {
-            KeyframesIterationState::Finite(_, max) => self.duration * (max as f64),
-            KeyframesIterationState::Infinite => 0.,
+            KeyframesIterationState::Finite(current, _) |
+            KeyframesIterationState::Infinite(current) => self.duration * current,
         }
     }
 
@@ -761,7 +759,6 @@ impl ElementAnimationSet {
         context: &SharedStyleContext,
         new_style: &Arc<ComputedValues>,
         font_metrics: &dyn crate::font_metrics::FontMetricsProvider,
-        needs_animations_update: bool,
     ) where
         E: TElement,
     {
@@ -770,18 +767,7 @@ impl ElementAnimationSet {
                 animation.state = AnimationState::Canceled;
             }
         }
-
-        // Starting animations is expensive, because we have to recalculate the style
-        // for all the keyframes. We only want to do this if we think that there's a
-        // chance that the animations really changed.
-        if needs_animations_update {
-            maybe_start_animations(element, &context, &new_style, self, font_metrics);
-        }
-
-        // When necessary, iterate our running animations to the next iteration.
-        for animation in self.animations.iter_mut() {
-            animation.iterate_if_necessary(context.current_time_for_animations);
-        }
+        maybe_start_animations(element, &context, &new_style, self, font_metrics);
     }
 
     /// Update our transitions given a new style, canceling or starting new animations
@@ -938,8 +924,8 @@ pub fn maybe_start_animations<E>(
         let delay = box_style.animation_delay_mod(i).seconds();
         let animation_start = context.current_time_for_animations + delay as f64;
         let iteration_state = match box_style.animation_iteration_count_mod(i) {
-            AnimationIterationCount::Infinite => KeyframesIterationState::Infinite,
-            AnimationIterationCount::Number(n) => KeyframesIterationState::Finite(0.0, n),
+            AnimationIterationCount::Infinite => KeyframesIterationState::Infinite(0.0),
+            AnimationIterationCount::Number(n) => KeyframesIterationState::Finite(0.0, n.into()),
         };
 
         let animation_direction = box_style.animation_direction_mod(i);
