@@ -1,4 +1,4 @@
-status = [ "ci", "Community-TC (push)" ]
+status = [ "ci", "Build (Linux)" ]
 block_labels = [ "S-do-not-merge-yet" ]
 cut_body_after = "<details>"
 timeout_sec = 36000 # ten hours
