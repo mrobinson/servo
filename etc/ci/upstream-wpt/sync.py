@@ -15,21 +15,15 @@ from github import GithubBranch, GithubRepository, PullRequest
 UPSTREAMABLE_PATH = 'tests/wpt/web-platform-tests/'
 NO_SYNC_SIGNAL = '[no-wpt-sync]'
 
-UPDATED_EXISTING_UPSTREAM_PR = 'Transplanted upstreamable changes to existing upstream PR ({upstream_pr}).'
-CLOSING_EXISTING_UPSTREAM_PR = 'No upstreamable changes; closed existing upstream PR ({upstream_pr}).'
-OPENED_NEW_UPSTREAM_PR = 'Found upstreamable WPT changes. Opened new upstream PR ({upstream_pr}).'
-UPDATED_TITLE_IN_EXISTING_UPSTREAM_PR = 'PR title changed. Updated existing upstream PR ({upstream_pr}).'
-NO_UPSTREAMBLE_CHANGES_COMMENT = "Downstream PR ({servo_pr}) no longer contains any upstreamable changes. Closing PR."
-
-COULD_NOT_APPLY_CHANGES_DOWNSTREAM_COMMENT = """These changes could not be applied onto the latest
- upstream web-platform-tests. Servo may be out of sync."""
-COULD_NOT_APPLY_CHANGES_UPSTREAM_COMMENT = """The downstream PR ({servo_pr}) can no longer be applied.
- Waiting for a new version of these changes downstream."""
-
-COULD_NOT_MERGE_CHANGES_DOWNSTREAM_COMMENT = """These changes could not be merged at the upstream
- PR ({upstream_pr}). Please address any CI issues and try to merge manually."""
-COULD_NOT_MERGE_CHANGES_UPSTREAM_COMMENT = """The downstream PR has merged ({servo_pr}), but these
- changes could not be merged properly. Please address any CI issues and try to merge manually."""
+OPENED_NEW_UPSTREAM_PR = '🤖 Opened new upstream WPT pull request ({upstream_pr}) with upstreamable changes.'
+UPDATED_EXISTING_UPSTREAM_PR = '📝 Transplanted new upstreamable changes to existing upstream WPT pull request ({upstream_pr}).'
+UPDATED_TITLE_IN_EXISTING_UPSTREAM_PR = '✍ Updated existing upstream WPT pull request ({upstream_pr}) title and body.'
+CLOSING_EXISTING_UPSTREAM_PR = '🤖 This change no longer contains upstreamable changes to WPT; closed existing upstream pull request ({upstream_pr}).'
+NO_UPSTREAMBLE_CHANGES_COMMENT = "👋 Downstream pull request ({servo_pr}) no longer contains any upstreamable changes. Closing pull request without merging."
+COULD_NOT_APPLY_CHANGES_DOWNSTREAM_COMMENT = """🛠 These changes could not be applied onto the latest upstream WPT. Servo's copy of the Web Platform Tests may be out of sync."""
+COULD_NOT_APPLY_CHANGES_UPSTREAM_COMMENT = """🛠 Changes from the source pull request ({servo_pr}) can no longer be cleanly applied. Waiting for a new version of these changes downstream."""
+COULD_NOT_MERGE_CHANGES_DOWNSTREAM_COMMENT = """⛔ Failed to properly merge the upstream pull request ({upstream_pr}). Please address any CI issues and try to merge manually."""
+COULD_NOT_MERGE_CHANGES_UPSTREAM_COMMENT = """⛔ The downstream PR has merged ({servo_pr}), but these changes could not be merged properly. Please address any CI issues and try to merge manually."""
 
 def wpt_branch_name_from_servo_pr_number(servo_pr_number):
     return f"servo_export_{servo_pr_number}"
@@ -100,7 +94,7 @@ class CreateOrUpdateBranchForPRStep(Step):
             self.name += ':%d:%s' % (len(commits), branch)
         except Exception as exception:
             logging.info("Could not apply changes to upstream WPT repository.")
-            logging.info(traceback.format_exception(exception))
+            logging.info(exception, exc_info=True)
 
             steps = []
             CommentStep.add(steps, self.pull_request, COULD_NOT_APPLY_CHANGES_DOWNSTREAM_COMMENT)
@@ -200,9 +194,6 @@ class ChangePRStep(Step):
         name = f'ChangePRStep:{pull_request}:{state}'
         if title:
             name += f':{title}'
-        if body:
-            body = ChangePRStep.prepare_body_text(body)
-            name += f':{textwrap.shorten(body, width=20, placeholder="...")}[{len(body)}]'
 
         Step.__init__(self, name)
         self.pull_request = pull_request
@@ -210,19 +201,13 @@ class ChangePRStep(Step):
         self.title = title
         self.body = body
 
-    @staticmethod
-    def prepare_body_text(body: str) -> str:
-        # Turn all bare issue references into unlinked ones, so that the PR
-        # doesn't inadvertantely close or link to issues in the upstream
-        # repository.
-        return re.sub(r"(^|\W)#([1-9]\d*)",
-                      "\\g<1>#<!-- nolink -->\\g<2>",
-                      body, flags=re.MULTILINE) \
-            .split("\n---")[0] \
-            .split("<!-- Thank you for")[0]
-
     def run(self, run: SyncRun):
-        self.pull_request.change(state=self.state, title=self.title, body=self.body)
+        body = self.body
+        if body:
+            body = run.prepare_body_text(body)
+            self.name += f':{textwrap.shorten(body, width=20, placeholder="...")}[{len(body)}]'
+
+        self.pull_request.change(state=self.state, title=self.title, body=body)
 
 
 class MergePRStep(Step):
@@ -238,7 +223,7 @@ class MergePRStep(Step):
             self.pull_request.merge()
         except Exception as exception:
             logging.warning(f"Could not merge PR ({self.pull_request}).")
-            logging.warning(traceback.format_exception(exception))
+            logging.warning(exception, exc_info=True)
 
             steps = []
             CommentStep.add(steps, self.pull_request, COULD_NOT_MERGE_CHANGES_UPSTREAM_COMMENT)
@@ -262,7 +247,8 @@ class OpenPRStep(Step):
 
     def run(self, run: SyncRun):
         pull_request = self.target_repo.open_pull_request(
-            self.source_branch.value(), self.title, self.body
+            self.source_branch.value(), self.title,
+            run.prepare_body_text(self.body)
         )
         assert not run.upstream_pr
         run.upstream_pr = pull_request
@@ -311,14 +297,13 @@ class SyncRun:
         pull_data = payload['pull_request']
         if payload['action'] in ['opened', 'synchronize', 'reopened']:
             self.steps_for_new_pull_request_contents(steps, pull_data)
-        elif payload['action'] == 'edited' and 'title' in pull_data['changes']:
-            self.steps_for_new_pull_request_title(steps, pull_data)
+        elif payload['action'] == 'edited':
+            self.steps_for_edited_pull_request(steps, pull_data)
         elif payload['action'] == 'closed':
             self.steps_for_closed_pull_request(steps, pull_data)
 
         while steps:
             steps = self.run_steps(steps)
-        return True
 
     def steps_for_new_pull_request_contents(self, steps: list[Step], pull_data: dict):
         is_upstreamable = len(self.sync.local_servo_repo.run(
@@ -353,14 +338,14 @@ class SyncRun:
                 steps, branch,
                 self.sync.wpt,
                 pull_data['title'],
-                f"Reviewed in {self.servo_pr}",
+                pull_data['body'],
                 ['servo-export', 'do not merge yet']
             )
 
             # Leave a comment to the new pull request in the original pull request.
             CommentStep.add(steps, self.servo_pr, OPENED_NEW_UPSTREAM_PR)
 
-    def steps_for_new_pull_request_title(self, steps: list[Step], pull_data: dict):
+    def steps_for_edited_pull_request(self, steps: list[Step], pull_data: dict):
         logging.info("Changing upstream PR title")
         if self.upstream_pr:
             ChangePRStep.add(steps, self.upstream_pr, 'open', pull_data['title'], pull_data['body'])
@@ -380,6 +365,20 @@ class SyncRun:
             # don't want to merge the changes upstream either.
             ChangePRStep.add(steps, self.upstream_pr, 'closed')
             RemoveBranchForPRStep.add(steps, pull_data)
+
+    @staticmethod
+    def clean_up_body_text(body: str) -> str:
+        # Turn all bare issue references into unlinked ones, so that the PR
+        # doesn't inadvertantely close or link to issues in the upstream
+        # repository.
+        return re.sub(r"(^|\W)#([1-9]\d*)",
+                      "\\g<1>#<!-- nolink -->\\g<2>",
+                      body, flags=re.MULTILINE) \
+            .split("\n---")[0] \
+            .split("<!-- Thank you for")[0]
+
+    def prepare_body_text(self, body: str) -> str:
+        return SyncRun.clean_up_body_text(body) + f"\nReviewed in {self.servo_pr}"
 
 
 class WPTSync:
@@ -406,14 +405,16 @@ class WPTSync:
 
         # Only look for an existing remote PR if the action is appropriate.
         logging.info(f"Processing '{payload['action']}' action...")
-        if payload['action'] not in [
-            'opened', 'synchronize', 'reopened',
-            'edited', 'closed']:
+        action = payload['action']
+        if action not in ['opened', 'synchronize', 'reopened', 'edited', 'closed']:
+            return True
+
+        if action == 'edited' and 'title' not in payload['changes'] and \
+                'body' not in payload['changes']:
             return True
 
         try:
             servo_pr = self.servo.get_pull_request(pull_data['number'])
-
             downstream_wpt_branch = self.downstream_wpt.get_branch(
                 wpt_branch_name_from_servo_pr_number(servo_pr.number))
             upstream_pr = self.wpt.get_open_pull_request_for_branch(downstream_wpt_branch)
@@ -421,10 +422,10 @@ class WPTSync:
                 logging.info(f"  → Detected existing upstream PR {upstream_pr}")
 
             SyncRun(self, servo_pr, upstream_pr, step_callback).run(payload)
-
+            return True
         except Exception as exception:
             if isinstance(exception, subprocess.CalledProcessError):
-                logging.error(exception)
+                logging.error(exception.output)
             logging.error(payload)
-            logging.error(traceback.format_exception(exception))
+            logging.warning(exception, exc_info=True)
             return False

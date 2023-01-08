@@ -1,15 +1,16 @@
 #!/usr/bin/env python
 
 import json
-import os
 import logging
+import os
+import sys
 
 from sync import WPTSync
 
 context = json.loads(os.environ['GITHUB_CONTEXT'])
 logging.getLogger().level = logging.INFO
 
-WPTSync(
+success = WPTSync(
     servo_repo='mrobinson/servo',
     wpt_repo='mrobinson/wpt',
     downstream_wpt_repo='mrobinson/wpt',
@@ -21,3 +22,4 @@ WPTSync(
     github_email='mrobinson@igalia.com',
     github_name='Servo WPT Sync',
 ).run(context["event"])
+sys.exit(0 if success else 1)

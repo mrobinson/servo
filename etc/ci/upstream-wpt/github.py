@@ -19,18 +19,17 @@ USER_AGENT = "Servo web-platform-test sync service"
 
 
 def authenticated(context: SyncRun, method, url, json=None) -> requests.Response:
-    requests.Session().headers = {
-        "Authorization": f"token {context.github_api_token}",
-        "User-Agent": USER_AGENT,
-    }
-
-    url = urllib.parse.urljoin(context.github_api_url, url)
-
     logging.info(f"  → Request: {method} {url}")
     if json:
         logging.info(f"  → Request JSON: {json}")
 
-    response = requests.Session().request(method, url, json=json)
+    headers = {
+        "Authorization": f"Bearer {context.github_api_token}",
+        "User-Agent": USER_AGENT
+    }
+
+    url = urllib.parse.urljoin(context.github_api_url, url)
+    response = requests.request(method, url, headers=headers, json=json)
     if int(response.status_code / 100) != 2:
         raise ValueError(
             "got unexpected %d response: %s" % (response.status_code, response.text)
@@ -116,6 +115,7 @@ class PullRequest:
         self.context = repo.context
         self.number = number
         self.base_url = f"repos/{self.repo.repo}/pulls/{self.number}"
+        self.base_issues_url = f"repos/{self.repo.repo}/issues/{self.number}"
 
     def __str__(self):
         return f"{self.repo}#{self.number}"
@@ -124,8 +124,7 @@ class PullRequest:
         return authenticated(self.context, *args, **kwargs)
 
     def leave_comment(self, comment: str):
-        url = f"repos/{self.repo.repo}/issues/{self.number}/comments"
-        return self.api("POST", url, json={"body": comment})
+        return self.api("POST", f"{self.base_issues_url}/comments", json={"body": comment})
 
     def change(self, state: str = None, title: str = None, body: str = None):
         data = {}
@@ -138,10 +137,10 @@ class PullRequest:
         return self.api("PATCH", self.base_url, json=data)
 
     def remove_label(self, label: str):
-        self.api("DELETE", f"{self.base_url}/labels/{label}")
+        self.api("DELETE", f"{self.base_issues_url}/labels/{label}")
 
     def add_labels(self, labels: list[str]):
-        self.api("POST", f"{self.base_url}/labels", json=labels)
+        self.api("POST", f"{self.base_issues_url}/labels", json=labels)
 
     def merge(self):
         self.api("PUT", f"{self.base_url}/merge", json={"merge_method": "rebase"})
