@@ -7,6 +7,7 @@
 from __future__ import annotations
 import dataclasses
 
+import json
 import logging
 import os
 import re
@@ -233,13 +234,14 @@ class CreateOrUpdateBranchForPRStep(Step):
 class RemoveBranchForPRStep(Step):
     def __init__(self, pull_request):
         Step.__init__(self, "RemoveBranchForPRStep")
-        self.pull_request = pull_request
+        self.branch_name = wpt_branch_name_from_servo_pr_number(pull_request["number"])
 
     def run(self, run: SyncRun):
+        self.name += f":{run.sync.downstream_wpt.get_branch(self.branch_name)}"
         logging.info("  -> Removing branch used for upstream PR")
-        branch_name = wpt_branch_name_from_servo_pr_number(self.pull_request["number"])
         if not run.sync.suppress_force_push:
-            run.sync.local_wpt_repo.run("push", "origin", "--delete", branch_name)
+            run.sync.local_wpt_repo.run("push", "origin", "--delete",
+                                        self.branch_name)
 
 
 class ChangePRStep(Step):
@@ -445,7 +447,9 @@ class SyncRun:
             # If a PR with upstreamable changes is closed without being merged, we
             # don't want to merge the changes upstream either.
             ChangePRStep.add(steps, self.upstream_pr, "closed")
-            RemoveBranchForPRStep.add(steps, pull_data)
+
+        # Always clean up our remote branch.
+        RemoveBranchForPRStep.add(steps, pull_data)
 
     @staticmethod
     def clean_up_body_text(body: str) -> str:
@@ -520,11 +524,12 @@ class WPTSync:
             if upstream_pr:
                 logging.info("  → Detected existing upstream PR %s", upstream_pr)
 
+            logging.error(json.dumps(payload))
             SyncRun(self, servo_pr, upstream_pr, step_callback).run(payload)
             return True
         except Exception as exception:
             if isinstance(exception, subprocess.CalledProcessError):
                 logging.error(exception.output)
-            logging.error(payload)
-            logging.warning(exception, exc_info=True)
+            logging.error(json.dumps(payload))
+            logging.error(exception, exc_info=True)
             return False
