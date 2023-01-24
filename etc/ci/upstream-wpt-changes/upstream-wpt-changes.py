@@ -27,7 +27,7 @@ def main() -> int:
     success = WPTSync(
         servo_repo='mrobinson/servo',
         wpt_repo='mrobinson/wpt',
-        downstream_wpt_repo='mrobinson/web-platform-tests',
+        downstream_wpt_repo='mrobinson/wpt',
         servo_path='./servo',
         wpt_path='./wpt',
         github_api_token=os.environ['WPT_SYNC_TOKEN'],
