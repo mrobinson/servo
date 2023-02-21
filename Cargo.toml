@@ -37,3 +37,8 @@ surfman-chains = { git = "https://github.com/servo/surfman-chains.git" }
 [patch."https://github.com/servo/webrender"]
 webrender = { git = "https://github.com/jdm/webrender", branch = "crash-backtrace" }
 webrender_api = { git = "https://github.com/jdm/webrender", branch = "crash-backtrace" }
+
+# https://github.com/servo/servo/issues/27949
+[patch."https://github.com/servo/mozjs"]
+mozjs = { path = "../mozjs/rust-mozjs" }
+mozjs_sys = { path = "../mozjs/mozjs" }
