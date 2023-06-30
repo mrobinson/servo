@@ -16,7 +16,7 @@ use msg::constellation_msg::{PipelineId, TopLevelBrowsingContextId};
 use net_traits::image::base::Image;
 use profile_traits::mem;
 use profile_traits::time;
-use script_traits::{AnimationState, EventResult, MouseButton, MouseEventType};
+use script_traits::{AnimationState, EventResult, MouseButton, MouseEventType, ViewportConstraints};
 use std::fmt::{Debug, Error, Formatter};
 use std::rc::Rc;
 use style_traits::CSSPixel;
@@ -84,6 +84,8 @@ pub enum Msg {
     TouchEventProcessed(EventResult),
     /// Composite to a PNG file and return the Image over a passed channel.
     CreatePng(Option<Rect<f32, CSSPixel>>, IpcSender<Option<Image>>),
+    /// Alerts the compositor that the viewport has been constrained in some manner
+    ViewportConstrained(PipelineId, Option<ViewportConstraints>),
     /// A reply to the compositor asking if the output image is stable.
     IsReadyToSaveImageReply(bool),
     /// Pipeline visibility changed
@@ -155,6 +157,7 @@ impl Debug for Msg {
             Msg::Recomposite(..) => write!(f, "Recomposite"),
             Msg::TouchEventProcessed(..) => write!(f, "TouchEventProcessed"),
             Msg::CreatePng(..) => write!(f, "CreatePng"),
+            Msg::ViewportConstrained(..) => write!(f, "ViewportConstrained"),
             Msg::IsReadyToSaveImageReply(..) => write!(f, "IsReadyToSaveImageReply"),
             Msg::PipelineVisibilityChanged(..) => write!(f, "PipelineVisibilityChanged"),
             Msg::PipelineExited(..) => write!(f, "PipelineExited"),

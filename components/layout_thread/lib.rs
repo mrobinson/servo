@@ -1015,7 +1015,11 @@ impl LayoutThread {
 
                         let root_size = {
                             let root_flow = layout_root.base();
-                            root_flow.overflow.scroll.size
+                            if data.viewport_constraints.is_some() {
+                                root_flow.position.size.to_physical(root_flow.writing_mode)
+                            } else {
+                                root_flow.overflow.scroll.size
+                            }
                         };
 
                         let origin = Rect::new(Point2D::new(Au(0), Au(0)), root_size).to_layout();
@@ -1172,7 +1176,6 @@ impl LayoutThread {
 
         let initial_viewport = data.window_size.initial_viewport;
         let device_pixel_ratio = data.window_size.device_pixel_ratio;
-        let old_viewport_size = self.viewport_size;
         let current_screen_size = Size2D::new(
             Au::from_f32_px(initial_viewport.width),
             Au::from_f32_px(initial_viewport.height),
@@ -1192,25 +1195,48 @@ impl LayoutThread {
             ua_or_user: &ua_or_user_guard,
         };
 
+        let old_viewport_size = self.viewport_size;
+        self.viewport_size = current_screen_size;
+        if let Some(viewport_constraints) = data.script_reflow.reflow_info.viewport_constraints {
+            debug!("Viewport constraints: {:?}", viewport_constraints);
+            self.viewport_size.width = viewport_constraints.width
+                .map(|width| Au::from_f32_px(width))
+                .unwrap_or(current_screen_size.width);
+            self.viewport_size.height = viewport_constraints.height
+                .map(|height| Au::from_f32_px(height))
+                .unwrap_or(current_screen_size.height);
+        }
+
         let had_used_viewport_units = self.stylist.device().used_viewport_units();
         let device = Device::new(
             MediaType::screen(),
             self.stylist.quirks_mode(),
-            initial_viewport,
+            Size2D::new(
+                self.viewport_size.width.to_f32_px(),
+                self.viewport_size.height.to_f32_px()),
             device_pixel_ratio,
         );
         let sheet_origins_affected_by_device_change = self.stylist.set_device(device, &guards);
-
         self.stylist
             .force_stylesheet_origins_dirty(sheet_origins_affected_by_device_change);
-        self.viewport_size = current_screen_size;
 
+        // Let the constellation know about the new viewport constraints.
         let viewport_size_changed = self.viewport_size != old_viewport_size;
-        if viewport_size_changed && had_used_viewport_units {
-            if let Some(mut data) = root_element.mutate_data() {
-                data.hint.insert(RestyleHint::recascade_subtree());
+        if viewport_size_changed {
+            rw_data
+                .constellation_chan
+                .send(ConstellationMsg::ViewportConstrained(
+                    self.id,
+                    data.script_reflow.reflow_info.viewport_constraints.clone(),
+                ))
+                .unwrap();
+            if had_used_viewport_units {
+                if let Some(mut data) = root_element.mutate_data() {
+                    data.hint.insert(RestyleHint::recascade_subtree());
+                }
             }
         }
+
 
         if self.first_reflow.get() {
             debug!("First reflow, rebuilding user and UA rules");

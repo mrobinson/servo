@@ -67,8 +67,7 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use style_traits::CSSPixel;
-use style_traits::SpeculativePainter;
+use style_traits::{CSSPixel, PinchZoomFactor, SpeculativePainter};
 use webgpu::identity::WebGPUMsg;
 use webrender_api::units::{
     DeviceIntSize, DevicePixel, LayoutPixel, LayoutPoint, LayoutSize, WorldPoint,
@@ -1324,4 +1323,31 @@ impl SerializedImageData {
             SerializedImageData::External(image) => Ok(ImageData::External(image.clone())),
         }
     }
+}
+
+/// Whether the zoom is fixed or user adjustable in the viewport.
+#[derive(Clone, Copy, Debug, Deserialize, MallocSizeOf, PartialEq, Serialize)]
+pub enum UserZoom {
+    /// The zoom is ajdustable.
+    Zoom,
+    /// The zoom is fixed.
+    Fixed,
+}
+/// A set of viewport descriptors:
+///
+/// <https://drafts.csswg.org/css-viewport/#viewport-meta>
+#[derive(Clone, Copy, Debug, Deserialize, MallocSizeOf, PartialEq, Serialize)]
+pub struct ViewportConstraints {
+    /// The width of the viewport
+    pub width: Option<f32>,
+    /// The height of the viewport
+    pub height: Option<f32>,
+    /// The initial scale of the viewport.
+    pub initial_scale: PinchZoomFactor,
+    /// The minimum scale of the viewport.
+    pub min_scale: Option<PinchZoomFactor>,
+    /// The maximum scale of the viewport.
+    pub max_scale: Option<PinchZoomFactor>,
+    /// Whether or not the viewport is user scalable.
+    pub user_zoom: UserZoom,
 }

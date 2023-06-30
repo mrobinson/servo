@@ -145,24 +145,18 @@ use net_traits::{self, FetchResponseMsg, IpcSend, ResourceThreads};
 use profile_traits::mem;
 use profile_traits::time;
 use script_traits::CompositorEvent::{MouseButtonEvent, MouseMoveEvent};
-use script_traits::{webdriver_msg, LogEntry, ScriptToConstellationChan, ServiceWorkerMsg};
-use script_traits::{
+use script_traits::{webdriver_msg, LogEntry, ScriptToConstellationChan, ServiceWorkerMsg,
     AnimationState, AnimationTickType, AuxiliaryBrowsingContextLoadInfo, BroadcastMsg,
     CompositorEvent,
-};
-use script_traits::{ConstellationControlMsg, DiscardBrowsingContext};
-use script_traits::{DocumentActivity, DocumentState, LayoutControlMsg, LoadData, LoadOrigin};
-use script_traits::{HistoryEntryReplacement, IFrameSizeMsg, WindowSizeData, WindowSizeType};
-use script_traits::{
+ConstellationControlMsg, DiscardBrowsingContext,
+DocumentActivity, DocumentState, LayoutControlMsg, LoadData, LoadOrigin,
+HistoryEntryReplacement, IFrameSizeMsg, WindowSizeData, WindowSizeType,
     IFrameLoadInfo, IFrameLoadInfoWithData, IFrameSandboxState, TimerSchedulerMsg,
-};
-use script_traits::{
     Job, LayoutMsg as FromLayoutMsg, ScriptMsg as FromScriptMsg, ScriptThreadFactory,
     ServiceWorkerManagerFactory,
-};
-use script_traits::{MediaSessionActionType, MouseEventType};
-use script_traits::{MessagePortMsg, PortMessageTask, StructuredSerializedData};
-use script_traits::{SWManagerMsg, SWManagerSenders, UpdatePipelineIdReason, WebDriverCommandMsg};
+MediaSessionActionType, MouseEventType,
+MessagePortMsg, PortMessageTask, StructuredSerializedData,
+SWManagerMsg, SWManagerSenders, ViewportConstraints, UpdatePipelineIdReason, WebDriverCommandMsg};
 use serde::{Deserialize, Serialize};
 use servo_config::{opts, pref};
 use servo_rand::{random, Rng, ServoRng, SliceRandom};
@@ -2108,6 +2102,9 @@ where
             },
             FromLayoutMsg::PendingPaintMetric(pipeline_id, epoch) => {
                 self.handle_pending_paint_metric(pipeline_id, epoch);
+            },
+            FromLayoutMsg::ViewportConstrained(pipeline_id, constraints) => {
+                self.handle_viewport_constrained_msg(pipeline_id, constraints);
             },
         }
     }
@@ -4928,6 +4925,19 @@ where
     ) {
         let browsing_context_id = BrowsingContextId::from(top_level_browsing_context_id);
         self.switch_fullscreen_mode(browsing_context_id);
+    }
+
+    /// Handle updating actual viewport / zoom due to @viewport rules
+    fn handle_viewport_constrained_msg(
+        &mut self,
+        pipeline_id: PipelineId,
+        constraints: Option<ViewportConstraints>,
+    ) {
+        self.compositor_proxy
+            .send(ToCompositorMsg::ViewportConstrained(
+                pipeline_id,
+                constraints,
+            ));
     }
 
     /// Checks the state of all script and layout pipelines to see if they are idle

@@ -37,7 +37,7 @@ use script_traits::CompositorEvent::{MouseButtonEvent, MouseMoveEvent, TouchEven
 use script_traits::{
     AnimationState, AnimationTickType, CompositorHitTestResult, LayoutControlMsg, MouseButton,
     MouseEventType, ScrollState, TouchEventType, TouchId, UntrustedNodeAddress, WheelDelta,
-    WindowSizeData, WindowSizeType,
+    WindowSizeData, WindowSizeType, ViewportConstraints,
 };
 use servo_geometry::{DeviceIndependentPixel, FramebufferUintLength};
 use std::collections::HashMap;
@@ -504,6 +504,13 @@ impl<Window: WindowMethods + ?Sized> IOCompositor<Window> {
                 if let Err(e) = reply.send(img) {
                     warn!("Sending reply to create png failed ({:?}).", e);
                 }
+            },
+
+            (
+                Msg::ViewportConstrained(pipeline_id, constraints),
+                ShutdownState::NotShuttingDown,
+            ) => {
+                self.constrain_viewport(pipeline_id, constraints);
             },
 
             (Msg::IsReadyToSaveImageReply(is_ready), ShutdownState::NotShuttingDown) => {
@@ -1353,6 +1360,22 @@ impl<Window: WindowMethods + ?Sized> IOCompositor<Window> {
         if let Err(e) = self.constellation_chan.send(msg) {
             warn!("Sending tick to constellation failed ({:?}).", e);
         }
+    }
+
+    fn constrain_viewport(&mut self, pipeline_id: PipelineId, constraints: Option<ViewportConstraints>) {
+        if self.root_pipeline.id != Some(pipeline_id) {
+            return;
+        }
+
+        self.viewport_zoom = constraints
+            .map(|constraints| constraints.initial_scale)
+            .unwrap_or(PinchZoomFactor::new(1.));
+        self.min_viewport_zoom = constraints.and_then(|constraints| constraints.min_scale);
+        self.max_viewport_zoom = constraints.and_then(|constraints| constraints.max_scale);
+        println!("viewport in comp: {:?} {:?} {:?}",
+            self.viewport_zoom,
+            self.min_viewport_zoom,
+            self.max_viewport_zoom);
     }
 
     fn hidpi_factor(&self) -> Scale<f32, DeviceIndependentPixel, DevicePixel> {

@@ -105,15 +105,15 @@ use net_traits::{Metadata, NetworkError, ReferrerPolicy, ResourceFetchTiming, Re
 use parking_lot::{Mutex as ParkMutex, RwLock};
 use profile_traits::mem::ProfilerChan as MemProfilerChan;
 use profile_traits::time::ProfilerChan as TimeProfilerChan;
-use script_layout_interface::message::PendingRestyle;
+use script_layout_interface::message::{PendingRestyle};
 use script_layout_interface::rpc::LayoutRPC;
 use script_layout_interface::StyleAndOpaqueLayoutData;
 use script_traits::serializable::BlobImpl;
 use script_traits::transferable::MessagePortImpl;
 use script_traits::{
-    DocumentActivity, DrawAPaintImageResult, MediaSessionActionType, ScriptToConstellationChan,
-    TimerEventId, TimerSource, UntrustedNodeAddress, WebrenderIpcSender, WindowSizeData,
-    WindowSizeType,
+    DocumentActivity, DrawAPaintImageResult, MediaSessionActionType,
+    ScriptToConstellationChan, TimerEventId, TimerSource, UntrustedNodeAddress,
+    ViewportConstraints, WebrenderIpcSender, WindowSizeData, WindowSizeType,
 };
 use selectors::matching::ElementSelectorFlags;
 use serde::{Deserialize, Serialize};
@@ -678,6 +678,7 @@ unsafe_no_jsmanaged_fields!(WebrenderIpcSender);
 unsafe_no_jsmanaged_fields!(StreamConsumer);
 unsafe_no_jsmanaged_fields!(DocumentAnimationSet);
 unsafe_no_jsmanaged_fields!(Stencil);
+unsafe_no_jsmanaged_fields!(ViewportConstraints);
 
 unsafe impl<'a> JSTraceable for &'a str {
     #[inline]

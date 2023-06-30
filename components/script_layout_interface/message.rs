@@ -13,7 +13,7 @@ use metrics::PaintTimeMetrics;
 use msg::constellation_msg::{BackgroundHangMonitorRegister, BrowsingContextId, PipelineId};
 use net_traits::image_cache::ImageCache;
 use profile_traits::mem::ReportsChan;
-use script_traits::Painter;
+use script_traits::{Painter, ViewportConstraints};
 use script_traits::{
     ConstellationControlMsg, LayoutControlMsg, LayoutMsg as ConstellationMsg, ScrollState,
     WindowSizeData,
@@ -179,6 +179,8 @@ impl ReflowGoal {
 pub struct Reflow {
     ///  A clipping rectangle for the page, an enlarged rectangle containing the viewport.
     pub page_clip_rect: Rect<Au>,
+    /// The viewport constraints of the document.
+    pub viewport_constraints: Option<ViewportConstraints>,
 }
 
 /// Information derived from a layout pass that needs to be returned to the script thread.

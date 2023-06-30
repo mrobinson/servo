@@ -119,11 +119,9 @@ use script_layout_interface::rpc::{
 };
 use script_layout_interface::{PendingImageState, TrustedNodeAddress};
 use script_traits::webdriver_msg::{WebDriverJSError, WebDriverJSResult};
-use script_traits::{ConstellationControlMsg, DocumentState, HistoryEntryReplacement, LoadData};
-use script_traits::{
+use script_traits::{ConstellationControlMsg, DocumentState, HistoryEntryReplacement, LoadData,
     ScriptMsg, ScriptToConstellationChan, ScrollState, StructuredSerializedData, TimerEventId,
-};
-use script_traits::{TimerSchedulerMsg, WebrenderIpcSender, WindowSizeData, WindowSizeType};
+    TimerSchedulerMsg, ViewportConstraints, WebrenderIpcSender, WindowSizeData, WindowSizeType};
 use selectors::attr::CaseSensitivity;
 use servo_arc::Arc as ServoArc;
 use servo_atoms::Atom;
@@ -274,6 +272,9 @@ pub struct Window {
     current_state: Cell<WindowState>,
 
     current_viewport: Cell<UntypedRect<Au>>,
+
+    /// Any viewport constraints that were set on this window by a `<meta>` tag.
+    viewport_constraints: Cell<Option<ViewportConstraints>>,
 
     error_reporter: CSSErrorReporter,
 
@@ -487,6 +488,12 @@ impl Window {
 
     pub fn current_viewport(&self) -> UntypedRect<Au> {
         self.current_viewport.clone().get()
+    }
+
+    /// Set the viewport constraints on this Window which will be passed to layout upon
+    /// the next layout. This is called when encountering the viewport `<meta>` tag.
+    pub(crate) fn set_viewport_constraints(&self, constraints: ViewportConstraints) {
+        self.viewport_constraints.set(Some(constraints));
     }
 
     pub(crate) fn webgl_chan(&self) -> Option<WebGLCommandSender> {
@@ -1889,6 +1896,7 @@ impl Window {
         let reflow = ScriptReflow {
             reflow_info: Reflow {
                 page_clip_rect: self.page_clip_rect.get(),
+                viewport_constraints: self.viewport_constraints.get(),
             },
             document: document.upcast::<Node>().to_trusted_node_address(),
             dirty_root,
@@ -2615,6 +2623,7 @@ impl Window {
             layout_rpc,
             window_size: Cell::new(window_size),
             current_viewport: Cell::new(Rect::zero()),
+            viewport_constraints: Cell::new(None),
             suppress_reflow: Cell::new(true),
             pending_reflow_count: Default::default(),
             current_state: Cell::new(WindowState::Alive),

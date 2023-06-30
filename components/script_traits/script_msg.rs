@@ -12,6 +12,7 @@ use crate::LoadData;
 use crate::MessagePortMsg;
 use crate::PortMessageTask;
 use crate::StructuredSerializedData;
+use crate::ViewportConstraints;
 use crate::WindowSizeType;
 use crate::WorkerGlobalScopeInit;
 use crate::WorkerScriptLoadOrigin;
@@ -59,6 +60,8 @@ pub enum LayoutMsg {
     /// Requests that the constellation inform the compositor that it needs to record
     /// the time when the frame with the given ID (epoch) is painted.
     PendingPaintMetric(PipelineId, Epoch),
+    /// Notifies the constellation that the viewport has been constrained in some manner
+    ViewportConstrained(PipelineId, Option<ViewportConstraints>),
 }
 
 impl fmt::Debug for LayoutMsg {
@@ -67,6 +70,7 @@ impl fmt::Debug for LayoutMsg {
         let variant = match *self {
             IFrameSizes(..) => "IFrameSizes",
             PendingPaintMetric(..) => "PendingPaintMetric",
+            ViewportConstrained(..) => "ViewportConstrained",
         };
         write!(formatter, "LayoutMsg::{}", variant)
     }

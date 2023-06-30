@@ -97,9 +97,9 @@ impl CSSRule {
             StyleCssRule::Supports(s) => {
                 DomRoot::upcast(CSSSupportsRule::new(window, parent_stylesheet, s))
             },
+            StyleCssRule::Viewport(_) => unimplemented!(),
             StyleCssRule::Page(_) => unreachable!(),
             StyleCssRule::Document(_) => unimplemented!(), // TODO
-            StyleCssRule::Viewport(_) => unimplemented!(), // TODO
             StyleCssRule::LayerBlock(_) => unimplemented!(), // TODO
             StyleCssRule::LayerStatement(_) => unimplemented!(), // TODO
             StyleCssRule::ScrollTimeline(_) => unimplemented!(), // TODO

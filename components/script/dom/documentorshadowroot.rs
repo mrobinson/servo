@@ -225,8 +225,6 @@ impl DocumentOrShadowRoot {
         insertion_point: Option<StyleSheetInDocument>,
         style_shared_lock: &StyleSharedRwLock,
     ) {
-        debug_assert!(owner.as_stylesheet_owner().is_some(), "Wat");
-
         let sheet = StyleSheetInDocument {
             sheet,
             owner: Dom::from_ref(owner),
