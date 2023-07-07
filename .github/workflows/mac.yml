@@ -163,4 +163,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Print workflow inputs
-        run: echo wpt='${{ inputs.wpt }}' layout='${{ inputs.layout }}'
+        run: echo wpt='${{ inputs.unit-tests }}' wpt='${{ inputs.wpt }}' layout='${{ inputs.layout }}'
