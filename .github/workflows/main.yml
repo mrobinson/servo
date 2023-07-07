@@ -1,10 +1,11 @@
-name: Merge queue and try
+name: Main
 
 on:
   push:
     branches: ["auto", "try"]
-
-  # Used by GH merge queue for landing PRs
+  pull_request:
+    types: ['opened', 'synchronize']
+    branches: ["**"]
   merge_group:
     types: [checks_requested]
 
@@ -13,10 +14,13 @@ on:
 
 jobs:
   decision:
-    name: Decision job
+    name: Decision
     runs-on: ubuntu-20.04
     steps:
-      - name: Previous successful build check
+      # If an identical build exists that suceeded, skip this workflow run. We don't do
+      # this check for pull_request and merge_group events, out of caution.
+      - name: Skip previous identical builds
+        if: ${{ !github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
         uses: actions/github-script@v6
         with:
           script: |
@@ -38,14 +42,14 @@ jobs:
     needs: ["decision"]
     uses: ./.github/workflows/windows.yml
     with:
-      unit-tests: true
+      unit-tests: ${{ github.event_name == 'push' || github.event_name == 'merge_group' }}
 
   build-mac:
     name: Mac
     needs: ["decision"]
     uses: ./.github/workflows/mac.yml
     with:
-      unit-tests: true
+      unit-tests: ${{ github.event_name == 'push' || github.event_name == 'merge_group' }}
 
   build-linux:
     name: Linux
@@ -53,11 +57,11 @@ jobs:
     uses: ./.github/workflows/linux.yml
     with:
       wpt: 'test'
-      layout: 'all'
-      unit-tests: true
+      layout: ${{ (github.event_name == 'push' || github.event_name == 'merge_group') && 'all' || 'none' }}
+      unit-tests: ${{ github.event_name == 'push' || github.event_name == 'merge_group' }}
 
   build_result:
-    name: homu build finished
+    name: Main Workflow
     runs-on: ubuntu-latest
     if: always()
     # needs all build to detect cancellation
