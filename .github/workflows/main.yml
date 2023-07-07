@@ -2,7 +2,7 @@ name: Main
 
 on:
   push:
-    branches: ["auto", "try"]
+    branches: ["master", "combine-workflows-for-merge-queue", "try"]
   pull_request:
     types: ['opened', 'synchronize']
     branches: ["**"]
@@ -39,17 +39,19 @@ jobs:
 
   build-win:
     name: Windows
+    if: ${{ github.event_name == 'push' || github.event_name == 'merge_group' }}
     needs: ["decision"]
     uses: ./.github/workflows/windows.yml
     with:
-      unit-tests: ${{ github.event_name == 'push' || github.event_name == 'merge_group' }}
+      unit-tests: true
 
   build-mac:
     name: Mac
+    if: ${{ github.event_name == 'push' || github.event_name == 'merge_group' }}
     needs: ["decision"]
     uses: ./.github/workflows/mac.yml
     with:
-      unit-tests: ${{ github.event_name == 'push' || github.event_name == 'merge_group' }}
+      unit-tests: true
 
   build-linux:
     name: Linux
