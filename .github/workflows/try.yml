@@ -3,13 +3,10 @@ name: Try
 on:
   pull_request:
     types: [labeled]
-  issue_comment:
-    types: [created]
 
 jobs:
   parse-comment:
     name: Process Comment
-    if: ${{ github.event.issue.pull_request }}
     runs-on: ubuntu-latest
     outputs:
       configuration: ${{ steps.configuration.outputs.result }}
