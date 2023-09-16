@@ -42,10 +42,12 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-            // If this is a workflow call with a configuration string, then just return it
-            // immediately.
-            if ("${{ inputs.configuration }}" != "") {
-              return JSON.fromString("${{ inputs.configuration }}");
+            // If this is a workflow call with a configuration object,
+            // then just return it immediately.
+            let configuration = ${{ inputs.configuration || '""' }};
+            if (configuration != "") {
+              console.log("Using configuration: " + JSON.stringify(configuration));
+              return configuration;
             }
 
             // We need to pick defaults if the inputs are not provided. Unprovided inputs
@@ -63,9 +65,9 @@ jobs:
 
             let platforms = [];
             if (platform == "all") {
-              platforms = ["linux", "windows", "macos"];
+              platforms = [ "linux", "windows", "macos" ];
             } else {
-              platforms = [platform];
+              platforms = [ platform ];
             }
 
             let returnValue =  {
