@@ -34,18 +34,19 @@ jobs:
             if (context.eventName == "pull_request") {
               let try_labels = [];
               for (const label of context.payload.pull_request.labels) {
-                if (label.startsWith("T-")) {
-                  try_labels.push(label);
+                if (!label.name.startsWith("T-")) {
+                  continue;
                 }
-                console.log("Found labels: " + try_labels);
-                github.rest.issues.removeLabel({
+
+                console.log(">>>> found label: " + label.name);
+                github.rest.issues.removelabel({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: context.issue.number,
-                  name: label,
+                  name: label.name,
                 })
-                return { platforms: [] };
               }
+              return { platforms: [] };
             } else {
               let tokens = context.payload.comment.body.split(/\s+/);
               let tagIndex = tokens.indexOf("@bors-servo");
