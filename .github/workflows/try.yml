@@ -31,7 +31,7 @@ jobs:
               unit_tests: false,
             };
 
-            if context.eventName == "pull_request" {
+            if (context.eventName == "pull_request") {
               let try_labels = [];
               for (const label of context.payload.pull_request.labels) {
                 if (label.startsWith("T-")) {
