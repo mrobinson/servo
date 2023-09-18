@@ -47,7 +47,6 @@ jobs:
             let configuration = ${{ inputs.configuration || '""' }};
             if (configuration != "") {
               console.log("Using configuration: " + JSON.stringify(configuration));
-              configuration.platforms = configuration.platforms.join(" ");
               return configuration;
             }
 
@@ -72,30 +71,18 @@ jobs:
             }
 
             let returnValue =  {
-              platforms: platforms.join(" "),
+              platforms,
               layout,
               unit_tests,
             };
+
             console.log("Using configuration: " + JSON.stringify(returnValue));
             return returnValue;
-
-  print:
-    name: Print
-    runs-on: ubuntu-latest
-    needs: ["decision"]
-    steps:
-      - name: Print stuff
-        run: |
-          echo "${{ needs.decision.outputs.configuration }}"
-          echo "${{ fromJson(needs.decision.outputs.configuration).platforms }}"
-          echo ${{ contains('linux', needs.decision.outputs.configuration) }}
-          echo ${{ contains('linux', toJson(needs.decision.outputs.configuration)) }}
-          echo ${{ contains('2013', fromJson(needs.decision.outputs.configuration).layout) }}
 
   build-win:
     name: Windows
     needs: ["decision"]
-    if: ${{ contains('windows', fromJson(needs.decision.outputs.configuration).platforms) }}
+    if: ${{ contains(fromJson(needs.decision.outputs.configuration).platforms, 'windows') }}
     uses: ./.github/workflows/windows.yml
     with:
       unit-tests: ${{ fromJson(needs.decision.outputs.configuration).unit_tests }}
@@ -103,7 +90,7 @@ jobs:
   build-mac:
     name: Mac
     needs: ["decision"]
-    if: ${{ contains('macos', fromJson(needs.decision.outputs.configuration).platforms) }}
+    if: ${{ contains(fromJson(needs.decision.outputs.configuration).platforms, 'macos') }}
     uses: ./.github/workflows/mac.yml
     with:
       unit-tests: ${{ fromJson(needs.decision.outputs.configuration).unit_tests }}
@@ -111,7 +98,7 @@ jobs:
   build-linux:
     name: Linux
     needs: ["decision"]
-    if: ${{ contains('linux', fromJson(needs.decision.outputs.configuration).platforms) }}
+    if: ${{ contains(fromJson(needs.decision.outputs.configuration).platforms, 'linux') }}
     uses: ./.github/workflows/linux.yml
     with:
       wpt: 'test'
