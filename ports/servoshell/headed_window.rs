@@ -5,12 +5,11 @@
 //! A winit window implementation.
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
 use std::rc::Rc;
 
 use euclid::num::Zero;
 use euclid::{Angle, Length, Point2D, Rotation3D, Scale, Size2D, UnknownUnit, Vector2D, Vector3D};
-use log::{debug, info, trace};
+use log::{debug, trace};
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use servo::compositing::windowing::{
     AnimationState, EmbedderCoordinates, EmbedderEvent, MouseWindowEvent, WindowMethods,
@@ -33,10 +32,8 @@ use surfman::{Connection, Context, Device, GLApi, GLVersion, SurfaceType};
 #[cfg(target_os = "windows")]
 use winapi;
 use winit::dpi::{LogicalPosition, PhysicalPosition, PhysicalSize};
-use winit::event::{
-    ElementState, KeyboardInput, ModifiersState, MouseButton, MouseScrollDelta, TouchPhase,
-    VirtualKeyCode,
-};
+use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase};
+use winit::keyboard::ModifiersState;
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 use winit::window::Icon;
 
@@ -56,10 +53,8 @@ pub struct Window {
     primary_monitor: winit::monitor::MonitorHandle,
     event_queue: RefCell<Vec<EmbedderEvent>>,
     mouse_pos: Cell<Point2D<i32, DevicePixel>>,
-    last_pressed: Cell<Option<(KeyboardEvent, Option<VirtualKeyCode>)>>,
     /// A map of winit's key codes to key values that are interpreted from
     /// winit's ReceivedChar events.
-    keys_down: RefCell<HashMap<VirtualKeyCode, Key>>,
     animation_state: Cell<AnimationState>,
     fullscreen: Cell<bool>,
     device_pixel_ratio_override: Option<f32>,
@@ -147,8 +142,6 @@ impl Window {
             mouse_down_button: Cell::new(None),
             mouse_down_point: Cell::new(Point2D::new(0, 0)),
             mouse_pos: Cell::new(Point2D::new(0, 0)),
-            last_pressed: Cell::new(None),
-            keys_down: RefCell::new(HashMap::new()),
             animation_state: Cell::new(AnimationState::Idle),
             fullscreen: Cell::new(false),
             inner_size: Cell::new(inner_size),
@@ -161,77 +154,18 @@ impl Window {
         }
     }
 
-    fn handle_received_character(&self, mut ch: char) {
-        info!("winit received character: {:?}", ch);
-        if ch.is_control() {
-            if ch as u8 >= 32 {
-                return;
-            }
-            // shift ASCII control characters to lowercase
-            ch = (ch as u8 + 96) as char;
-        }
-        let (mut event, key_code) = if let Some((event, key_code)) = self.last_pressed.replace(None)
-        {
-            (event, key_code)
-        } else if ch.is_ascii() {
-            // Some keys like Backspace emit a control character in winit
-            // but they are already dealt with in handle_keyboard_input
-            // so just ignore the character.
-            return;
-        } else {
-            // For combined characters like the letter e with an acute accent
-            // no keyboard event is emitted. A dummy event is created in this case.
-            (KeyboardEvent::default(), None)
-        };
-        event.key = Key::Character(ch.to_string());
-
-        if event.state == KeyState::Down {
-            // Ensure that when we receive a keyup event from winit, we are able
-            // to infer that it's related to this character and set the event
-            // properties appropriately.
-            if let Some(key_code) = key_code {
-                self.keys_down
-                    .borrow_mut()
-                    .insert(key_code, event.key.clone());
-            }
-        }
+    fn handle_keyboard_input(&self, winit_event: &KeyEvent) {
+        trace!("handle_keyboard_input: {winit_event:?}");
+        let event = keyboard_event_from_winit(winit_event, self.modifiers_state.get());
 
         let xr_poses = self.xr_window_poses.borrow();
         for xr_window_pose in &*xr_poses {
+            xr_window_pose.handle_xr_rotation(&event, self.modifiers_state.get());
             xr_window_pose.handle_xr_translation(&event);
         }
         self.event_queue
             .borrow_mut()
             .push(EmbedderEvent::Keyboard(event));
-    }
-
-    fn handle_keyboard_input(&self, input: KeyboardInput) {
-        let mut event = keyboard_event_from_winit(input, self.modifiers_state.get());
-        trace!("handling {:?}", event);
-        if event.state == KeyState::Down && event.key == Key::Unidentified {
-            // If pressed and probably printable, we expect a ReceivedCharacter event.
-            // Wait for that to be received and don't queue any event right now.
-            self.last_pressed.set(Some((event, input.virtual_keycode)));
-            return;
-        } else if event.state == KeyState::Up && event.key == Key::Unidentified {
-            // If release and probably printable, this is following a ReceiverCharacter event.
-            if let Some(key_code) = input.virtual_keycode {
-                if let Some(key) = self.keys_down.borrow_mut().remove(&key_code) {
-                    event.key = key;
-                }
-            }
-        }
-
-        if event.key != Key::Unidentified {
-            self.last_pressed.set(None);
-            let xr_poses = self.xr_window_poses.borrow();
-            for xr_window_pose in &*xr_poses {
-                xr_window_pose.handle_xr_rotation(&input, self.modifiers_state.get());
-            }
-            self.event_queue
-                .borrow_mut()
-                .push(EmbedderEvent::Keyboard(event));
-        }
     }
 
     /// Helper function to handle a click
@@ -314,8 +248,9 @@ impl WindowPortsMethods for Window {
     }
 
     fn set_inner_size(&self, size: DeviceIntSize) {
-        self.winit_window
-            .set_inner_size::<PhysicalSize<i32>>(PhysicalSize::new(size.width, size.height))
+        let _ = self
+            .winit_window
+            .request_inner_size::<PhysicalSize<i32>>(PhysicalSize::new(size.width, size.height));
     }
 
     fn set_position(&self, point: DeviceIntPoint) {
@@ -345,7 +280,7 @@ impl WindowPortsMethods for Window {
 
         let winit_cursor = match cursor {
             Cursor::Default => CursorIcon::Default,
-            Cursor::Pointer => CursorIcon::Hand,
+            Cursor::Pointer => CursorIcon::Pointer,
             Cursor::ContextMenu => CursorIcon::ContextMenu,
             Cursor::Help => CursorIcon::Help,
             Cursor::Progress => CursorIcon::Progress,
@@ -391,13 +326,17 @@ impl WindowPortsMethods for Window {
         self.winit_window.id()
     }
 
-    fn queue_embedder_events_for_winit_event(&self, event: winit::event::WindowEvent<'_>) {
+    fn queue_embedder_events_for_winit_event(&self, event: winit::event::WindowEvent) {
         match event {
-            winit::event::WindowEvent::ReceivedCharacter(ch) => self.handle_received_character(ch),
-            winit::event::WindowEvent::KeyboardInput { input, .. } => {
-                self.handle_keyboard_input(input)
+            winit::event::WindowEvent::Ime(_) => {
+                // TODO: Handle IME events.
             },
-            winit::event::WindowEvent::ModifiersChanged(state) => self.modifiers_state.set(state),
+            winit::event::WindowEvent::KeyboardInput { ref event, .. } => {
+                self.handle_keyboard_input(event)
+            },
+            winit::event::WindowEvent::ModifiersChanged(modifiers) => {
+                self.modifiers_state.set(modifiers.state())
+            },
             winit::event::WindowEvent::MouseInput { state, button, .. } => {
                 if button == MouseButton::Left || button == MouseButton::Right {
                     self.handle_mouse(button, state, self.mouse_pos.get());
@@ -483,6 +422,9 @@ impl WindowPortsMethods for Window {
                     self.inner_size.set(new_size);
                     self.event_queue.borrow_mut().push(EmbedderEvent::Resize);
                 }
+            },
+            winit::event::WindowEvent::RedrawRequested => {
+                self.event_queue.borrow_mut().push(EmbedderEvent::Idle);
             },
             _ => {},
         }
@@ -732,20 +674,20 @@ impl XRWindowPose {
         self.xr_translation.set(vec);
     }
 
-    fn handle_xr_rotation(&self, input: &KeyboardInput, modifiers: ModifiersState) {
-        if input.state != winit::event::ElementState::Pressed {
+    fn handle_xr_rotation(&self, event: &KeyboardEvent, modifiers: ModifiersState) {
+        if event.state != KeyState::Down {
             return;
         }
         let mut x = 0.0;
         let mut y = 0.0;
-        match input.virtual_keycode {
-            Some(VirtualKeyCode::Up) => x = 1.0,
-            Some(VirtualKeyCode::Down) => x = -1.0,
-            Some(VirtualKeyCode::Left) => y = 1.0,
-            Some(VirtualKeyCode::Right) => y = -1.0,
+        match event.key {
+            Key::ArrowUp => x = 1.0,
+            Key::ArrowDown => x = -1.0,
+            Key::ArrowLeft => y = 1.0,
+            Key::ArrowRight => y = -1.0,
             _ => return,
         };
-        if modifiers.shift() {
+        if modifiers.shift_key() {
             x *= 10.0;
             y *= 10.0;
         }

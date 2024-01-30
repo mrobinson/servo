@@ -63,7 +63,14 @@ impl App {
         user_agent: Option<String>,
         url: Option<String>,
     ) {
-        let events_loop = EventsLoop::new(opts::get().headless, opts::get().output_file.is_some());
+        let events_loop =
+            match EventsLoop::new(opts::get().headless, opts::get().output_file.is_some()) {
+                Ok(events_loop) => events_loop,
+                Err(error) => {
+                    eprintln!("Could not create event loop: {error:?}. Exiting.");
+                    return;
+                },
+            };
 
         // Implements window methods, used by compositor.
         let window = if opts::get().headless {
@@ -112,13 +119,7 @@ impl App {
             debug_assert_eq!(webrender_gl.get_error(), gleam::gl::NO_ERROR);
 
             app.minibrowser = Some(
-                Minibrowser::new(
-                    &rendering_context,
-                    &events_loop,
-                    window.as_ref(),
-                    initial_url.clone(),
-                )
-                .into(),
+                Minibrowser::new(&rendering_context, &events_loop, initial_url.clone()).into(),
             );
         }
 
@@ -138,7 +139,7 @@ impl App {
         let t_start = Instant::now();
         let mut t = t_start;
         let ev_waker = events_loop.create_event_loop_waker();
-        events_loop.run_forever(move |event, w, control_flow| {
+        events_loop.run_forever(move |event, event_loop_window_target, control_flow| {
             let now = Instant::now();
             match event {
                 // Uncomment to filter out logging of common events, which can be very noisy.
@@ -170,7 +171,7 @@ impl App {
                             std::mem::transmute::<
                                 &EventLoopWindowTarget<WakerEvent>,
                                 &'static EventLoopWindowTarget<WakerEvent>,
-                            >(w.unwrap())
+                            >(event_loop_window_target.unwrap())
                         };
                         let factory = Box::new(move || Ok(window.new_glwindow(w)));
                         Some(GlWindowDiscovery::new(
@@ -215,73 +216,79 @@ impl App {
             // If self.servo is None here, it means that we're in the process of shutting down,
             // let's ignore events.
             if app.servo.is_none() {
-                return;
-            }
-
-            if let winit::event::Event::RedrawRequested(_) = event {
-                // We need to redraw the window for some reason.
-                trace!("RedrawRequested");
-
-                // WARNING: do not defer painting or presenting to some later tick of the event
-                // loop or servoshell may become unresponsive! (servo#30312)
-                if need_recomposite {
-                    trace!("need_recomposite");
-                    app.servo.as_mut().unwrap().recomposite();
-                }
-                if let Some(mut minibrowser) = app.minibrowser() {
-                    minibrowser.update(
-                        window.winit_window().unwrap(),
-                        app.servo.as_ref().unwrap().offscreen_framebuffer_id(),
-                        "RedrawRequested",
-                    );
-                    minibrowser.paint(window.winit_window().unwrap());
-                }
-                app.servo.as_mut().unwrap().present();
-
-                // By default, the next RedrawRequested event will need to recomposite.
-                need_recomposite = true;
+                return false;
             }
 
             // Handle the event
             let mut consumed = false;
-            if let Some(mut minibrowser) = app.minibrowser() {
-                match event {
-                    winit::event::Event::WindowEvent {
-                        event: WindowEvent::ScaleFactorChanged { scale_factor, .. },
-                        ..
-                    } => {
-                        // Intercept any ScaleFactorChanged events away from EguiGlow::on_event, so
-                        // we can use our own logic for calculating the scale factor and set egui’s
-                        // scale factor to that value manually.
-                        let effective_scale_factor = window.hidpi_factor().get();
-                        info!(
-                            "window scale factor changed to {}, setting scale factor to {}",
-                            scale_factor, effective_scale_factor
-                        );
+            let winit_window = window.winit_window().unwrap();
+            match event {
+                winit::event::Event::WindowEvent {
+                    event: WindowEvent::ScaleFactorChanged { scale_factor, .. },
+                    ..
+                } => {
+                    // Intercept any ScaleFactorChanged events away from EguiGlow::on_event, so
+                    // we can use our own logic for calculating the scale factor and set egui’s
+                    // scale factor to that value manually.
+                    let effective_scale_factor = window.hidpi_factor().get();
+                    info!(
+                        "window scale factor changed to {}, setting scale factor to {}",
+                        scale_factor, effective_scale_factor
+                    );
+                    if let Some(minibrowser) = app.minibrowser() {
                         minibrowser
                             .context
                             .egui_ctx
                             .set_pixels_per_point(effective_scale_factor);
+                    }
 
-                        // Request a winit redraw event, so we can recomposite, update and paint
-                        // the minibrowser, and present the new frame.
-                        window.winit_window().unwrap().request_redraw();
-                    },
-                    winit::event::Event::WindowEvent { ref event, .. } => {
-                        let response = minibrowser.on_event(&event);
+                    // Request a winit redraw event, so we can recomposite, update and paint
+                    // the minibrowser, and present the new frame.
+                    winit_window.request_redraw();
+                },
+                winit::event::Event::WindowEvent {
+                    event: WindowEvent::RedrawRequested,
+                    ..
+                } => {
+                    // We need to redraw the window for some reason.
+                    trace!("RedrawRequested");
+
+                    // WARNING: do not defer painting or presenting to some later tick of the event
+                    // loop or servoshell may become unresponsive! (servo#30312)
+                    if need_recomposite {
+                        trace!("need_recomposite");
+                        app.servo.as_mut().unwrap().recomposite();
+                    }
+                    if let Some(mut minibrowser) = app.minibrowser() {
+                        minibrowser.update(
+                            winit_window,
+                            app.servo.as_ref().unwrap().offscreen_framebuffer_id(),
+                            "RedrawRequested",
+                        );
+                        minibrowser.paint(window.winit_window().unwrap());
+                    }
+                    app.servo.as_mut().unwrap().present();
+
+                    // By default, the next RedrawRequested event will need to recomposite.
+                    need_recomposite = true;
+                },
+                winit::event::Event::WindowEvent { ref event, .. } => {
+                    if let Some(mut minibrowser) = app.minibrowser() {
+                        let response = minibrowser.on_event(winit_window, &event);
                         if response.repaint {
                             // Request a winit redraw event, so we can recomposite, update and paint
                             // the minibrowser, and present the new frame.
-                            window.winit_window().unwrap().request_redraw();
+                            winit_window.request_redraw();
                         }
 
                         // TODO how do we handle the tab key? (see doc for consumed)
                         // Note that servo doesn’t yet support tabbing through links and inputs
                         consumed = response.consumed;
-                    },
-                    _ => {},
-                }
+                    }
+                },
+                _ => {},
             }
+
             if !consumed {
                 app.queue_embedder_events_for_winit_event(event);
             }
@@ -304,11 +311,11 @@ impl App {
 
             match app.handle_events() {
                 PumpResult::Shutdown => {
-                    *control_flow = winit::event_loop::ControlFlow::Exit;
                     app.servo.take().unwrap().deinit();
                     if let Some(mut minibrowser) = app.minibrowser() {
                         minibrowser.context.destroy();
                     }
+                    return false;
                 },
                 PumpResult::Continue {
                     history_changed,
@@ -367,6 +374,9 @@ impl App {
                     }
                 },
             }
+
+            // Returning true here means "do not exit."
+            true
         });
     }
 
@@ -380,7 +390,7 @@ impl App {
 
     /// Processes the given winit Event, possibly converting it to an [EmbedderEvent] and
     /// routing that to the App or relevant Window event queues.
-    fn queue_embedder_events_for_winit_event(&self, event: winit::event::Event<'_, WakerEvent>) {
+    fn queue_embedder_events_for_winit_event(&self, event: winit::event::Event<WakerEvent>) {
         match event {
             // App level events
             winit::event::Event::Suspended => {
@@ -395,10 +405,6 @@ impl App {
             },
             winit::event::Event::DeviceEvent { .. } => {},
 
-            winit::event::Event::RedrawRequested(_) => {
-                self.event_queue.borrow_mut().push(EmbedderEvent::Idle);
-            },
-
             // Window level events
             winit::event::Event::WindowEvent {
                 window_id, event, ..
@@ -411,10 +417,10 @@ impl App {
                 },
             },
 
-            winit::event::Event::LoopDestroyed |
             winit::event::Event::NewEvents(..) |
-            winit::event::Event::MainEventsCleared |
-            winit::event::Event::RedrawEventsCleared => {},
+            winit::event::Event::AboutToWait |
+            winit::event::Event::LoopExiting |
+            winit::event::Event::MemoryWarning => {},
         }
     }
 

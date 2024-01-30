@@ -9,6 +9,7 @@ use std::time;
 
 use log::warn;
 use servo::embedder_traits::EventLoopWaker;
+use winit::error::EventLoopError;
 #[cfg(target_os = "macos")]
 use winit::platform::macos::{ActivationPolicy, EventLoopBuilderExtMacOS};
 
@@ -33,24 +34,24 @@ impl EventsLoop {
     // Ideally, we could use the winit event loop in both modes,
     // but on Linux, the event loop requires a X11 server.
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-    pub fn new(_headless: bool, _has_output_file: bool) -> EventsLoop {
-        EventsLoop(EventLoop::Winit(Some(
-            winit::event_loop::EventLoopBuilder::with_user_event().build(),
-        )))
+    pub fn new(_headless: bool, _has_output_file: bool) -> Result<EventsLoop, EventLoopError> {
+        Ok(EventsLoop(EventLoop::Winit(Some(
+            winit::event_loop::EventLoopBuilder::with_user_event().build()?,
+        ))))
     }
     #[cfg(target_os = "linux")]
-    pub fn new(headless: bool, _has_output_file: bool) -> EventsLoop {
-        EventsLoop(if headless {
+    pub fn new(headless: bool, _has_output_file: bool) -> Result<EventsLoop, EventLoopError> {
+        Ok(EventsLoop(if headless {
             EventLoop::Headless(Arc::new((Mutex::new(false), Condvar::new())))
         } else {
             EventLoop::Winit(Some(
-                winit::event_loop::EventLoopBuilder::with_user_event().build(),
+                winit::event_loop::EventLoopBuilder::with_user_event().build()?,
             ))
-        })
+        }))
     }
     #[cfg(target_os = "macos")]
-    pub fn new(headless: bool, _has_output_file: bool) -> EventsLoop {
-        EventsLoop(if headless {
+    pub fn new(headless: bool, _has_output_file: bool) -> Result<EventsLoop, EventLoopError> {
+        Ok(EventsLoop(if headless {
             EventLoop::Headless(Arc::new((Mutex::new(false), Condvar::new())))
         } else {
             let mut event_loop_builder = winit::event_loop::EventLoopBuilder::with_user_event();
@@ -59,8 +60,8 @@ impl EventsLoop {
                 // when generating an output file.
                 event_loop_builder.with_activation_policy(ActivationPolicy::Prohibited);
             }
-            EventLoop::Winit(Some(event_loop_builder.build()))
-        })
+            EventLoop::Winit(Some(event_loop_builder.build()?))
+        }))
     }
 }
 
@@ -88,17 +89,24 @@ impl EventsLoop {
     pub fn run_forever<F: 'static>(self, mut callback: F)
     where
         F: FnMut(
-            winit::event::Event<'_, WakerEvent>,
+            winit::event::Event<WakerEvent>,
             Option<&winit::event_loop::EventLoopWindowTarget<WakerEvent>>,
             &mut winit::event_loop::ControlFlow,
-        ),
+        ) -> bool,
     {
         match self.0 {
             EventLoop::Winit(events_loop) => {
                 let events_loop = events_loop.expect("Can't run an unavailable event loop.");
-                events_loop.run(move |e, window_target, ref mut control_flow| {
-                    callback(e, Some(window_target), control_flow)
-                });
+                events_loop
+                    .run(move |e, window_target| {
+                        let mut control_flow = window_target.control_flow();
+                        let exit = !callback(e, Some(window_target), &mut control_flow);
+                        window_target.set_control_flow(control_flow);
+                        if exit {
+                            window_target.exit();
+                        }
+                    })
+                    .ok();
             },
             EventLoop::Headless(ref data) => {
                 let (flag, condvar) = &**data;
@@ -106,14 +114,14 @@ impl EventsLoop {
                 loop {
                     self.sleep(flag, condvar);
                     let mut control_flow = winit::event_loop::ControlFlow::Poll;
-                    callback(event, None, &mut control_flow);
+                    let exit = !callback(event, None, &mut control_flow);
                     event = winit::event::Event::<WakerEvent>::UserEvent(WakerEvent);
 
                     if control_flow != winit::event_loop::ControlFlow::Poll {
                         *flag.lock().unwrap() = false;
                     }
 
-                    if control_flow == winit::event_loop::ControlFlow::Exit {
+                    if exit {
                         break;
                     }
                 }
