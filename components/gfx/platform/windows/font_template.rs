@@ -9,7 +9,7 @@ use dwrote::{Font, FontCollection};
 use serde::{Deserialize, Serialize};
 use webrender_api::NativeFontHandle;
 
-use crate::font_cache_thread::FontIdentifier;
+use crate::font_identifier::FontIdentifier;
 
 #[derive(Deserialize, Serialize)]
 pub struct FontTemplateData {

@@ -21,7 +21,7 @@ use style::values::specified::font::FontStretchKeyword;
 use crate::font::{
     FontHandleMethods, FontMetrics, FontTableMethods, FontTableTag, FractionalPixel,
 };
-use crate::font_cache_thread::FontIdentifier;
+use crate::font_identifier::FontIdentifier;
 use crate::platform::font_template::FontTemplateData;
 use crate::platform::windows::font_context::FontContextHandle;
 use crate::text::glyph::GlyphId;

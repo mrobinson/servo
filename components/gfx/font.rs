@@ -24,8 +24,8 @@ use style::values::computed::font::{GenericFontFamily, SingleFontFamily};
 use unicode_script::Script;
 use webrender_api::FontInstanceKey;
 
-use crate::font_cache_thread::FontIdentifier;
 use crate::font_context::{FontContext, FontSource};
+use crate::font_identifier::FontIdentifier;
 use crate::font_template::FontTemplateDescriptor;
 use crate::platform::font::{FontHandle, FontTable};
 use crate::platform::font_context::FontContextHandle;

@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use app_units::Au;
 use gfx::font::{self, FontMetrics, FontRef, RunMetrics, ShapingFlags, ShapingOptions};
-use gfx::font_cache_thread::FontIdentifier;
+use gfx::font_identifier::FontIdentifier;
 use gfx::text::glyph::ByteIndex;
 use gfx::text::text_run::TextRun;
 use gfx::text::util::{self, CompressionMode};

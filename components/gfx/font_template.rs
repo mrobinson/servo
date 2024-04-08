@@ -13,7 +13,7 @@ use style::properties::style_structs::Font as FontStyleStruct;
 use style::values::computed::font::FontWeight;
 
 use crate::font::FontHandleMethods;
-use crate::font_cache_thread::FontIdentifier;
+use crate::font_identifier::FontIdentifier;
 use crate::platform::font::FontHandle;
 use crate::platform::font_context::FontContextHandle;
 use crate::platform::font_template::FontTemplateData;

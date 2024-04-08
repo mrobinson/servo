@@ -5,8 +5,10 @@
 #![deny(unsafe_code)]
 
 pub mod font;
+mod font_data_store;
 pub mod font_cache_thread;
 pub mod font_context;
+pub mod font_identifier;
 pub mod font_template;
 #[allow(unsafe_code)]
 mod platform;

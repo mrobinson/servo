@@ -25,10 +25,11 @@ use webrender_api::{FontInstanceKey, FontKey};
 
 use crate::font::{FontFamilyDescriptor, FontFamilyName, FontSearchScope};
 use crate::font_context::FontSource;
+use crate::font_identifier::FontIdentifier;
 use crate::font_template::{FontTemplate, FontTemplateDescriptor};
 use crate::platform::font_context::FontContextHandle;
 use crate::platform::font_list::{
-    for_each_available_family, for_each_variation, system_default_family, LocalFontIdentifier,
+    for_each_available_family, for_each_variation, system_default_family,
     SANS_SERIF_FONT_FAMILY,
 };
 use crate::platform::font_template::FontTemplateData;
@@ -49,12 +50,6 @@ pub struct FontTemplateInfo {
 pub struct SerializedFontTemplateInfo {
     pub serialized_font_template: SerializedFontTemplate,
     pub font_key: FontKey,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub enum FontIdentifier {
-    Local(LocalFontIdentifier),
-    Web(ServoUrl),
 }
 
 #[derive(Debug, Deserialize, Serialize)]

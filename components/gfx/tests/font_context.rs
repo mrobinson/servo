@@ -13,8 +13,9 @@ use app_units::Au;
 use gfx::font::{
     fallback_font_families, FontDescriptor, FontFamilyDescriptor, FontFamilyName, FontSearchScope,
 };
-use gfx::font_cache_thread::{FontIdentifier, FontTemplateInfo, FontTemplates};
+use gfx::font_cache_thread::{FontTemplateInfo, FontTemplates};
 use gfx::font_context::{FontContext, FontContextHandle, FontSource};
+use gfx::font_identifier::FontIdentifier;
 use gfx::font_template::FontTemplateDescriptor;
 use servo_arc::Arc;
 use servo_atoms::Atom;

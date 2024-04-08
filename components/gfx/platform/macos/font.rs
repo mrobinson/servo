@@ -25,7 +25,7 @@ use crate::font::{
     FontHandleMethods, FontMetrics, FontTableMethods, FontTableTag, FractionalPixel, GPOS, GSUB,
     KERN,
 };
-use crate::font_cache_thread::FontIdentifier;
+use crate::font_identifier::FontIdentifier;
 use crate::platform::font_template::FontTemplateData;
 use crate::platform::macos::font_context::FontContextHandle;
 use crate::text::glyph::GlyphId;

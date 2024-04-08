@@ -3,13 +3,11 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub use crate::platform::freetype::{font, font_context};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-pub use crate::platform::freetype::{font_list, font_template};
+pub use crate::platform::freetype::{font, font_context, font_identifier, font_list, font_template};
 #[cfg(target_os = "macos")]
-pub use crate::platform::macos::{font, font_context, font_list, font_template};
+pub use crate::platform::macos::{font, font_context, font_identifier, font_list, font_template};
 #[cfg(target_os = "windows")]
-pub use crate::platform::windows::{font, font_context, font_list, font_template};
+pub use crate::platform::windows::{font, font_context, font_identifier, font_list, font_template};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod freetype {
@@ -28,6 +26,7 @@ mod freetype {
 
     pub mod font;
     pub mod font_context;
+    pub mod font_identifier;
 
     #[cfg(target_os = "linux")]
     pub mod font_list;
@@ -47,6 +46,7 @@ mod freetype {
 mod macos {
     pub mod font;
     pub mod font_context;
+    pub mod font_identifier;
     pub mod font_list;
     pub mod font_template;
 }
@@ -55,6 +55,7 @@ mod macos {
 mod windows {
     pub mod font;
     pub mod font_context;
+    pub mod font_identifier;
     pub mod font_list;
     pub mod font_template;
 }

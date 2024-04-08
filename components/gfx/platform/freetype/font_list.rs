@@ -13,25 +13,15 @@ use fontconfig_sys::{
 };
 use libc::{c_char, c_int};
 use log::debug;
-use serde::{Deserialize, Serialize};
 use style::Atom;
 
-use super::c_str_to_string;
+use super::{c_str_to_string, font_identifier::LocalFontIdentifier};
 use crate::text::util::is_cjk;
 
 static FC_FAMILY: &[u8] = b"family\0";
 static FC_FILE: &[u8] = b"file\0";
 static FC_INDEX: &[u8] = b"index\0";
 static FC_FONTFORMAT: &[u8] = b"fontformat\0";
-
-/// An identifier for a local font on systems using Freetype.
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct LocalFontIdentifier {
-    /// The path to the font.
-    pub path: Atom,
-    /// The variation index within the font.
-    pub variation_index: i32,
-}
 
 pub fn for_each_available_family<F>(mut callback: F)
 where

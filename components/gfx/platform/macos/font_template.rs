@@ -5,10 +5,8 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt;
-use std::fs::File;
-use std::io::{Error as IoError, Read};
+use std::io::Error as IoError;
 use std::ops::Deref;
-use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
 
 use app_units::Au;
@@ -19,7 +17,8 @@ use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use webrender_api::NativeFontHandle;
 
-use crate::font_cache_thread::FontIdentifier;
+use crate::font_data_store::FontDataStore;
+use crate::font_identifier::FontIdentifier;
 
 /// Platform specific font representation for MacOS. CTFont object is cached here for use
 /// by the paint functions that create CGFont references.
@@ -103,16 +102,7 @@ impl FontTemplateData {
             .write()
             .unwrap()
             .get_or_insert_with(|| {
-                let path = match &self.identifier {
-                    FontIdentifier::Local(local) => local.path.clone(),
-                    FontIdentifier::Web(_) => unreachable!("Web fonts should always have data."),
-                };
-                let mut bytes = Vec::new();
-                File::open(Path::new(&*path))
-                    .expect("Couldn't open font file!")
-                    .read_to_end(&mut bytes)
-                    .unwrap();
-                Arc::new(bytes)
+                FontDataStore::get().get_or_load_data_for_identifier(&self.identifier.clone().into())
             })
             .clone()
     }
