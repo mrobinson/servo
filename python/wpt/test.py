@@ -145,6 +145,7 @@ class MockGitHubAPIServer():
             head_ref = f"{params['author']}:{params['head']}"
 
             for pull_request in self.pulls:
+                print(f"search {head_ref}   --> {pull_request.head}")
                 if pull_request.head == head_ref:
                     return json.dumps({
                         "total_count": 1,
