@@ -19,7 +19,7 @@ use style::Zero;
 use unicode_bidi::{BidiInfo, Level};
 use webrender_api::FontInstanceKey;
 
-use super::inline_box::{InlineBoxContainerState, InlineBoxIdentifier, InlineBoxTreePathToken};
+use super::inline_box::{self, InlineBoxContainerState, InlineBoxIdentifier, InlineBoxTreePathToken};
 use super::{InlineFormattingContextLayout, LineBlockSizes};
 use crate::cell::ArcRefCell;
 use crate::fragment_tree::{
@@ -179,6 +179,61 @@ impl<'layout_data, 'layout> LineItemLayout<'layout_data, 'layout> {
         .layout(line_items)
     }
 
+    fn is_bidi_ltr(&self) -> bool {
+        self
+            .layout
+            .containing_block
+            .style
+            .writing_mode
+            .is_bidi_ltr()
+    }
+
+    fn measure_inline_boxes(&self, line_items: &Vec<LineItem>) {
+        let prepare_layout_for_inline_box = |new_inline_box: Option<InlineBoxIdentifier>| {
+            // Optimize the case where we are moving to the root of the inline box stack.
+            let Some(new_inline_box) = new_inline_box else {
+                while !self.state_stack.is_empty() {
+                    // end
+                }
+                return;
+            };
+
+            // Otherwise, follow the path given to us by our collection of inline boxes, so we know which
+            // inline boxes to start and end.
+            let path = self
+                .layout
+                .ifc
+                .inline_boxes
+                .get_path(self.current_state.identifier, new_inline_box);
+            for token in path {
+                match token {
+                    InlineBoxTreePathToken::Start(ref identifier) => {},
+                    InlineBoxTreePathToken::End(_) => {}
+                }
+            }
+        };
+
+        let line_item_iterator = if self.is_bidi_ltr() {
+            Either::Left(line_items.into_iter())
+        } else {
+            Either::Right(line_items.into_iter().rev())
+        };
+
+        let mut size = Au::zero();
+        for item in line_item_iterator.into_iter().by_ref() {
+            prepare_layout_for_inline_box(item.inline_box_identifier());
+
+            match item {
+                LineItem::LeftInlineBoxPaddingBorderMargin(_) => todo!(),
+                LineItem::RightInlineBoxPaddingBorderMargin(_) => todo!(),
+                LineItem::TextRun(_, text_run) => text_run.width(),
+                LineItem::Atomic(_, _) => todo!(),
+                LineItem::AbsolutelyPositioned(_, _) => todo!(),
+                LineItem::Float(_, _) => todo!(),
+            }
+        }
+    }
+
     /// Start and end inline boxes in tree order, so that it reflects the given inline box.
     fn prepare_layout_for_inline_box(&mut self, new_inline_box: Option<InlineBoxIdentifier>) {
         // Optimize the case where we are moving to the root of the inline box stack.
@@ -239,13 +294,7 @@ impl<'layout_data, 'layout> LineItemLayout<'layout_data, 'layout> {
         // from inline-start to inline-end. If the overall line contents have been flipped
         // for BiDi, flip them again so that they are in line start-to-end order rather
         // than left-to-right order.
-        let line_item_iterator = if self
-            .layout
-            .containing_block
-            .style
-            .writing_mode
-            .is_bidi_ltr()
-        {
+        let line_item_iterator = if self.is_bidi_ltr() {
             Either::Left(line_items.into_iter())
         } else {
             Either::Right(line_items.into_iter().rev())
@@ -377,13 +426,7 @@ impl<'layout_data, 'layout> LineItemLayout<'layout_data, 'layout> {
             .flags
             .contains(LineLayoutInlineContainerFlags::HAD_RIGHT_PBM);
 
-        let (had_start, had_end) = if self
-            .layout
-            .containing_block
-            .style
-            .writing_mode
-            .is_bidi_ltr()
-        {
+        let (had_start, had_end) = if self.is_bidi_ltr() {
             (had_left, had_right)
         } else {
             (had_right, had_left)
@@ -535,20 +578,11 @@ impl<'layout_data, 'layout> LineItemLayout<'layout_data, 'layout> {
             return;
         }
 
-        let mut number_of_justification_opportunities = 0;
-        let mut inline_advance = text_item
-            .text
-            .iter()
-            .map(|glyph_store| {
-                number_of_justification_opportunities += glyph_store.total_word_separators();
-                glyph_store.total_advance()
-            })
-            .sum();
-
+        let mut inline_advance = text_item.inline_advance_from_glyphs;
         if !self.justification_adjustment.is_zero() {
             inline_advance += self
                 .justification_adjustment
-                .scale_by(number_of_justification_opportunities as f32);
+                .scale_by(text_item.justification_opportunities as f32);
         }
 
         // The block start of the TextRun is often zero (meaning it has the same font metrics as the
@@ -714,6 +748,54 @@ impl<'layout_data, 'layout> LineItemLayout<'layout_data, 'layout> {
             .fragments
             .push((Fragment::Float(float.fragment), LogicalRect::zero()));
     }
+
+    fn inline_advance_for_item(&self, line_item: &LineItem) -> Au {
+        enum Side {
+            Start,
+            End
+        }
+
+        let get_pbm_for_inline_box = |identifier: &InlineBoxIdentifier, side: Side| {
+            let inline_box_state =
+                &*self.layout.inline_box_states[identifier.index_in_inline_boxes as usize];
+            let padding = inline_box_state.pbm.padding;
+            let border = inline_box_state.pbm.border;
+            let margin = inline_box_state.pbm.margin.auto_is(Au::zero);
+            match side {
+                Side::Start => padding.inline_start + border.inline_start + margin.inline_start,
+                Side::End => padding.inline_end + border.inline_end + margin.inline_end,
+            }
+        };
+
+        match line_item {
+            LineItem::LeftInlineBoxPaddingBorderMargin(identifier) => {
+                if self.is_bidi_ltr() {
+                    get_pbm_for_inline_box(identifier, Side::Start)
+                } else {
+                    get_pbm_for_inline_box(identifier, Side::End)
+                }
+            }
+            LineItem::RightInlineBoxPaddingBorderMargin(identifier) => {
+                if self.is_bidi_ltr() {
+                    get_pbm_for_inline_box(identifier, Side::End)
+                } else {
+                    get_pbm_for_inline_box(identifier, Side::Start)
+                }
+            }
+            LineItem::TextRun(_, text_item) => {
+                let mut inline_advance = text_item.inline_advance_from_glyphs;
+                if !self.justification_adjustment.is_zero() {
+                    inline_advance += self
+                        .justification_adjustment
+                        .scale_by(text_item.justification_opportunities as f32);
+                }
+                inline_advance
+            },
+            LineItem::Atomic(_, atomic_item) => atomic_item.size.inline,
+            LineItem::AbsolutelyPositioned(_, _) => Au::zero(),
+            LineItem::Float(_, _) => Au::zero(),
+        }
+    }
 }
 
 pub(super) enum LineItem {
@@ -769,6 +851,13 @@ pub(super) struct TextRunLineItem {
     pub text_decoration_line: TextDecorationLine,
     /// The BiDi level of this [`TextRunLineItem`] to enable reordering.
     pub bidi_level: Level,
+    /// The inline advance of this text run only taking into account the width of
+    /// the glyphs. The actual advance of the [`TextRunLineItem`] might be different
+    /// due to justification adjustment.
+    pub inline_advance_from_glyphs: Au,
+    /// The total number of justification opportunities in this [`TextRunLineItem`]'s
+    /// collection of [`GlyphStore`]s.
+    pub justification_opportunities: usize,
 }
 
 impl TextRunLineItem {
@@ -824,6 +913,10 @@ impl TextRunLineItem {
 
     pub(crate) fn can_merge(&self, font_key: FontInstanceKey, bidi_level: Level) -> bool {
         self.font_key == font_key && self.bidi_level == bidi_level
+    }
+
+    fn width(&self) {
+        todo!()
     }
 }
 

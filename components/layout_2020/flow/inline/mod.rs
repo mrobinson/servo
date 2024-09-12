@@ -280,13 +280,7 @@ impl LineUnderConstruction {
         self.line_items
             .iter()
             .filter_map(|item| match item {
-                LineItem::TextRun(_, text_run) => Some(
-                    text_run
-                        .text
-                        .iter()
-                        .map(|glyph_store| glyph_store.total_word_separators())
-                        .sum::<usize>(),
-                ),
+                LineItem::TextRun(_, text_run) => Some(text_run.justification_opportunities),
                 _ => None,
             })
             .sum()
@@ -1294,12 +1288,17 @@ impl<'layout_dta> InlineFormattingContextLayout<'layout_dta> {
         self.update_unbreakable_segment_for_new_content(&strut_size, inline_advance, flags);
 
         let current_inline_box_identifier = self.current_inline_box_identifier();
+        let inline_advance_from_glyphs = glyph_store.total_advance();
+        let justification_opportunities = glyph_store.total_word_separators();
+
         match self.current_line_segment.line_items.last_mut() {
             Some(LineItem::TextRun(inline_box_identifier, line_item))
                 if *inline_box_identifier == current_inline_box_identifier &&
                     line_item.can_merge(ifc_font_info.key, bidi_level) =>
             {
                 line_item.text.push(glyph_store);
+                line_item.inline_advance_from_glyphs += inline_advance_from_glyphs;
+                line_item.justification_opportunities += justification_opportunities;
                 return;
             },
             _ => {},
@@ -1315,6 +1314,8 @@ impl<'layout_dta> InlineFormattingContextLayout<'layout_dta> {
                 font_key: ifc_font_info.key,
                 text_decoration_line: self.current_inline_container_state().text_decoration_line,
                 bidi_level,
+                inline_advance_from_glyphs,
+                justification_opportunities,
             },
         ));
     }
