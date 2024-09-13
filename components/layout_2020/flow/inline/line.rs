@@ -4,6 +4,7 @@
 
 use app_units::Au;
 use bitflags::bitflags;
+use euclid::Rect;
 use fonts::{FontMetrics, GlyphStore};
 use itertools::Either;
 use servo_arc::Arc;
@@ -22,19 +23,19 @@ use webrender_api::FontInstanceKey;
 use super::inline_box::{self, InlineBoxContainerState, InlineBoxIdentifier, InlineBoxTreePathToken};
 use super::{InlineFormattingContextLayout, LineBlockSizes};
 use crate::cell::ArcRefCell;
+use crate::flow::solve_inline_margins_avoiding_floats;
 use crate::fragment_tree::{
     BaseFragmentInfo, BoxFragment, CollapsedBlockMargins, Fragment, TextFragment,
 };
-use crate::geom::{AuOrAuto, LogicalRect, LogicalVec2, PhysicalRect, ToLogical};
+use crate::geom::{AuOrAuto, LogicalRect, LogicalVec2, PhysicalRect, RectAxis, ToLogical};
 use crate::positioned::{
     relative_adjustement, AbsolutelyPositionedBox, PositioningContext, PositioningContextLength,
 };
 use crate::ContainingBlock;
 
 pub(super) struct LineMetrics {
-    /// The block offset of the line start in the containing
-    /// [`crate::flow::InlineFormattingContext`].
-    pub block_offset: Au,
+    /// The origin of the line start in the containing [`crate::flow::InlineFormattingContext`].
+    pub origin: LogicalVec2<Au>,
 
     /// The block size of this line.
     pub block_size: Au,
@@ -130,6 +131,12 @@ impl LineItemLayoutInlineContainerState {
     }
 }
 
+enum InlineBoxAdvance {
+    Inside(Au),
+    StartPaddingBorderMargin(Au),
+    EndPaddingBorderMargin(Au),
+}
+
 /// The second phase of [`super::InlineFormattingContext`] layout: once items are gathered
 /// for a line, we must lay them out and create fragments for them, properly positioning them
 /// according to their baselines and also handling absolutely positioned children.
@@ -157,7 +164,7 @@ impl<'layout_data, 'layout> LineItemLayout<'layout_data, 'layout> {
     pub(super) fn layout_line_items(
         layout: &mut InlineFormattingContextLayout,
         line_items: Vec<LineItem>,
-        start_position: LogicalVec2<Au>,
+        origin: LogicalVec2<Au>,
         effective_block_advance: &LineBlockSizes,
         justification_adjustment: Au,
     ) -> Vec<Fragment> {
@@ -166,11 +173,11 @@ impl<'layout_data, 'layout> LineItemLayout<'layout_data, 'layout> {
             layout,
             state_stack: Vec::new(),
             current_state: LineItemLayoutInlineContainerState::root(
-                start_position.inline,
+                origin.inline,
                 baseline_offset,
             ),
             line_metrics: LineMetrics {
-                block_offset: start_position.block,
+                origin,
                 block_size: effective_block_advance.resolve(),
                 baseline_block_offset: baseline_offset,
             },
@@ -186,52 +193,6 @@ impl<'layout_data, 'layout> LineItemLayout<'layout_data, 'layout> {
             .style
             .writing_mode
             .is_bidi_ltr()
-    }
-
-    fn measure_inline_boxes(&self, line_items: &Vec<LineItem>) {
-        let prepare_layout_for_inline_box = |new_inline_box: Option<InlineBoxIdentifier>| {
-            // Optimize the case where we are moving to the root of the inline box stack.
-            let Some(new_inline_box) = new_inline_box else {
-                while !self.state_stack.is_empty() {
-                    // end
-                }
-                return;
-            };
-
-            // Otherwise, follow the path given to us by our collection of inline boxes, so we know which
-            // inline boxes to start and end.
-            let path = self
-                .layout
-                .ifc
-                .inline_boxes
-                .get_path(self.current_state.identifier, new_inline_box);
-            for token in path {
-                match token {
-                    InlineBoxTreePathToken::Start(ref identifier) => {},
-                    InlineBoxTreePathToken::End(_) => {}
-                }
-            }
-        };
-
-        let line_item_iterator = if self.is_bidi_ltr() {
-            Either::Left(line_items.into_iter())
-        } else {
-            Either::Right(line_items.into_iter().rev())
-        };
-
-        let mut size = Au::zero();
-        for item in line_item_iterator.into_iter().by_ref() {
-            prepare_layout_for_inline_box(item.inline_box_identifier());
-
-            match item {
-                LineItem::LeftInlineBoxPaddingBorderMargin(_) => todo!(),
-                LineItem::RightInlineBoxPaddingBorderMargin(_) => todo!(),
-                LineItem::TextRun(_, text_run) => text_run.width(),
-                LineItem::Atomic(_, _) => todo!(),
-                LineItem::AbsolutelyPositioned(_, _) => todo!(),
-                LineItem::Float(_, _) => todo!(),
-            }
-        }
     }
 
     /// Start and end inline boxes in tree order, so that it reflects the given inline box.
@@ -260,33 +221,35 @@ impl<'layout_data, 'layout> LineItemLayout<'layout_data, 'layout> {
     }
 
     pub(super) fn layout(&mut self, mut line_items: Vec<LineItem>) -> Vec<Fragment> {
-        let mut last_level = Level::ltr();
-        let levels: Vec<_> = line_items
-            .iter()
-            .map(|item| {
-                let level = match item {
-                    LineItem::TextRun(_, text_run) => text_run.bidi_level,
-                    // TODO: This level needs either to be last_level, or if there were
-                    // unicode characters inserted for the inline box, we need to get the
-                    // level from them.
-                    LineItem::LeftInlineBoxPaddingBorderMargin(_) => last_level,
-                    LineItem::RightInlineBoxPaddingBorderMargin(_) => last_level,
-                    LineItem::Atomic(_, atomic) => atomic.bidi_level,
-                    LineItem::AbsolutelyPositioned(..) => last_level,
-                    LineItem::Float(..) => {
-                        // At this point the float is already positioned, so it doesn't really matter what
-                        // position it's fragment has in the order of line items.
-                        last_level
-                    },
-                };
-                last_level = level;
-                level
-            })
-            .collect();
-
         if self.layout.ifc.has_right_to_left_content {
+            let mut last_level = Level::ltr();
+            let levels: Vec<_> = line_items
+                .iter()
+                .map(|item| {
+                    let level = match item {
+                        LineItem::TextRun(_, text_run) => text_run.bidi_level,
+                        // TODO: This level needs either to be last_level, or if there were
+                        // unicode characters inserted for the inline box, we need to get the
+                        // level from them.
+                        LineItem::LeftInlineBoxPaddingBorderMargin(_) => last_level,
+                        LineItem::RightInlineBoxPaddingBorderMargin(_) => last_level,
+                        LineItem::Atomic(_, atomic) => atomic.bidi_level,
+                        LineItem::AbsolutelyPositioned(..) => last_level,
+                        LineItem::Float(..) => {
+                            // At this point the float is already positioned, so it doesn't really matter what
+                            // position it's fragment has in the order of line items.
+                            last_level
+                        },
+                    };
+                    last_level = level;
+                    level
+                })
+                .collect();
+
             sort_by_indices_in_place(&mut line_items, BidiInfo::reorder_visual(&levels));
         }
+
+        let measurements = LineLayoutBoundsMeasurement::new(self, &line_items);
 
         // `BidiInfo::reorder_visual` will reorder the contents of the line so that they
         // are in the correct order as if one was looking at the line from left-to-right.
@@ -739,7 +702,7 @@ impl<'layout_data, 'layout> LineItemLayout<'layout_data, 'layout> {
         // properties such as opacity & filters.
         let distance_from_parent_to_ifc = LogicalVec2 {
             inline: self.current_state.parent_offset.inline,
-            block: self.line_metrics.block_offset + self.current_state.parent_offset.block,
+            block: self.line_metrics.origin.block + self.current_state.parent_offset.block,
         };
         float.fragment.content_rect.origin -= distance_from_parent_to_ifc
             .to_physical_size(self.layout.containing_block.style.writing_mode);
@@ -749,7 +712,10 @@ impl<'layout_data, 'layout> LineItemLayout<'layout_data, 'layout> {
             .push((Fragment::Float(float.fragment), LogicalRect::zero()));
     }
 
-    fn inline_advance_for_item(&self, line_item: &LineItem) -> Au {
+    /// Return the inline advance from the item. The first value returned is inline advance
+    /// that's added to the current box. The second value is inline advance that's added to
+    /// the parent box.
+    fn inline_advance_for_item(&self, line_item: &LineItem) -> Option<InlineBoxAdvance> {
         enum Side {
             Start,
             End
@@ -762,25 +728,25 @@ impl<'layout_data, 'layout> LineItemLayout<'layout_data, 'layout> {
             let border = inline_box_state.pbm.border;
             let margin = inline_box_state.pbm.margin.auto_is(Au::zero);
             match side {
-                Side::Start => padding.inline_start + border.inline_start + margin.inline_start,
-                Side::End => padding.inline_end + border.inline_end + margin.inline_end,
+                Side::Start => InlineBoxAdvance::StartPaddingBorderMargin(padding.inline_start + border.inline_start + margin.inline_start),
+                Side::End => InlineBoxAdvance::EndPaddingBorderMargin(padding.inline_end + border.inline_end + margin.inline_end),
             }
         };
 
         match line_item {
             LineItem::LeftInlineBoxPaddingBorderMargin(identifier) => {
-                if self.is_bidi_ltr() {
+                Some(if self.is_bidi_ltr() {
                     get_pbm_for_inline_box(identifier, Side::Start)
                 } else {
                     get_pbm_for_inline_box(identifier, Side::End)
-                }
+                })
             }
             LineItem::RightInlineBoxPaddingBorderMargin(identifier) => {
-                if self.is_bidi_ltr() {
+                Some(if self.is_bidi_ltr() {
                     get_pbm_for_inline_box(identifier, Side::End)
                 } else {
                     get_pbm_for_inline_box(identifier, Side::Start)
-                }
+                })
             }
             LineItem::TextRun(_, text_item) => {
                 let mut inline_advance = text_item.inline_advance_from_glyphs;
@@ -789,11 +755,97 @@ impl<'layout_data, 'layout> LineItemLayout<'layout_data, 'layout> {
                         .justification_adjustment
                         .scale_by(text_item.justification_opportunities as f32);
                 }
-                inline_advance
+                Some(InlineBoxAdvance::Inside(inline_advance))
             },
-            LineItem::Atomic(_, atomic_item) => atomic_item.size.inline,
-            LineItem::AbsolutelyPositioned(_, _) => Au::zero(),
-            LineItem::Float(_, _) => Au::zero(),
+            LineItem::Atomic(_, atomic_item) => Some(InlineBoxAdvance::Inside(atomic_item.size.inline)),
+            LineItem::AbsolutelyPositioned(_, _) => None,
+            LineItem::Float(_, _) => None,
+        }
+    }
+}
+
+struct LineLayoutBoundsMeasurement {
+    stack: Vec<usize>,
+    sizes_in_order: Vec<RectAxis<Au>>,
+}
+
+impl LineLayoutBoundsMeasurement {
+    fn new(layout: &LineItemLayout, line_items: &Vec<LineItem>) -> Self {
+        let mut this = Self {
+            sizes_in_order: vec![RectAxis {
+                origin: layout.line_metrics.origin.inline,
+                size: Au::zero(),
+            }],
+            stack: vec![0],
+        };
+
+        let line_item_iterator = if layout.is_bidi_ltr() {
+            Either::Left(line_items.into_iter())
+        } else {
+            Either::Right(line_items.into_iter().rev())
+        };
+
+        for item in line_item_iterator.into_iter().by_ref() {
+            this.prepare_layout_for_inline_box(layout, item.inline_box_identifier());
+            match layout.inline_advance_for_item(item) {
+                Some(InlineBoxAdvance::Inside(advance)) =>
+                    this.current_rect_mut().size += advance,
+                Some(InlineBoxAdvance::StartPaddingBorderMargin(advance)) => {
+                    this.parent_rect_mut().size += advance;
+                    this.current_rect_mut().origin += advance;
+                }
+                Some(InlineBoxAdvance::EndPaddingBorderMargin(advance)) =>
+                    this.parent_rect_mut().size += advance,
+                None => {},
+            }
+        }
+
+        this
+    }
+
+    fn current_rect_mut(&mut self) -> &mut RectAxis<Au> {
+        let index = *self.stack.last().expect("Expected a current box");
+        &mut self.sizes_in_order[index]
+    }
+
+    fn parent_rect_mut(&mut self) -> &mut RectAxis<Au> {
+        let stack_length = self.stack.len();
+        let parent_index = *self.stack.get(stack_length - 2).expect("Expected a parent box.");
+        &mut self.sizes_in_order[parent_index]
+    }
+
+    fn prepare_layout_for_inline_box(&mut self, layout: &LineItemLayout, new_inline_box: Option<InlineBoxIdentifier>) {
+        // Optimize the case where we are moving to the root of the inline box stack.
+        let Some(new_inline_box) = new_inline_box else {
+            let box_size = self.current_rect_mut().size;
+            self.stack.pop();
+            self.current_rect_mut().size += box_size;
+            return;
+        };
+
+        // Otherwise, follow the path given to us by our collection of inline boxes, so we know which
+        // inline boxes to start and end.
+        let path = layout
+            .layout
+            .ifc
+            .inline_boxes
+            .get_path(layout.current_state.identifier, new_inline_box);
+        for token in path {
+            match token {
+                InlineBoxTreePathToken::Start(_) => {
+                    let current_inline_offset = self.current_rect_mut().size;
+                    self.sizes_in_order.push(RectAxis {
+                        origin: current_inline_offset,
+                        size: Au::zero(),
+                    });
+                    self.stack.push(self.sizes_in_order.len() - 1);
+                },
+                InlineBoxTreePathToken::End(_) => {
+                    let box_size = self.current_rect_mut().size;
+                    self.stack.pop();
+                    self.current_rect_mut().size += box_size;
+                }
+            }
         }
     }
 }
@@ -913,10 +965,6 @@ impl TextRunLineItem {
 
     pub(crate) fn can_merge(&self, font_key: FontInstanceKey, bidi_level: Level) -> bool {
         self.font_key == font_key && self.bidi_level == bidi_level
-    }
-
-    fn width(&self) {
-        todo!()
     }
 }
 

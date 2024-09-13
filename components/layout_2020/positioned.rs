@@ -22,8 +22,7 @@ use crate::fragment_tree::{
     BoxFragment, CollapsedBlockMargins, Fragment, FragmentFlags, HoistedSharedFragment,
 };
 use crate::geom::{
-    AuOrAuto, LengthPercentageOrAuto, LogicalRect, LogicalSides, LogicalVec2, PhysicalPoint,
-    PhysicalRect, PhysicalVec, ToLogical, ToLogicalWithContainingBlock,
+    AuOrAuto, LengthPercentageOrAuto, LogicalRect, LogicalSides, LogicalVec2, PhysicalPoint, PhysicalRect, PhysicalVec, RectAxis, ToLogical, ToLogicalWithContainingBlock
 };
 use crate::style_ext::{ComputedValuesExt, DisplayInside};
 use crate::{ContainingBlock, DefiniteContainingBlock, IndefiniteContainingBlock};
@@ -774,27 +773,6 @@ impl HoistedAbsolutelyPositionedBox {
     }
 }
 
-#[derive(Clone, Copy)]
-struct RectAxis {
-    origin: Au,
-    length: Au,
-}
-
-impl LogicalRect<Au> {
-    fn get_axis(&self, axis: AxisDirection) -> RectAxis {
-        match axis {
-            AxisDirection::Block => RectAxis {
-                origin: self.start_corner.block,
-                length: self.size.block,
-            },
-            AxisDirection::Inline => RectAxis {
-                origin: self.start_corner.inline,
-                length: self.size.inline,
-            },
-        }
-    }
-}
-
 #[derive(Debug)]
 struct AbsoluteBoxOffsets<'a> {
     start: LengthPercentageOrAuto<'a>,
@@ -830,7 +808,7 @@ struct AbsoluteAxisSolver<'a> {
     computed_margin_end: AuOrAuto,
     avoid_negative_margin_start: bool,
     box_offsets: AbsoluteBoxOffsets<'a>,
-    static_position_rect_axis: RectAxis,
+    static_position_rect_axis: RectAxis<Au>,
     alignment: AlignFlags,
     flip_anchor: bool,
 }
@@ -936,7 +914,7 @@ impl<'a> AbsoluteAxisSolver<'a> {
             !self.computed_margin_end.is_auto()
     }
 
-    fn origin_for_alignment_or_justification(&self, margin_box_axis: RectAxis) -> Option<Au> {
+    fn origin_for_alignment_or_justification(&self, margin_box_axis: RectAxis<Au>) -> Option<Au> {
         let alignment_container = match (
             self.box_offsets.start.non_auto(),
             self.box_offsets.end.non_auto(),
@@ -948,7 +926,7 @@ impl<'a> AbsoluteAxisSolver<'a> {
 
                 RectAxis {
                     origin: start,
-                    length: self.containing_size - (end + start),
+                    size: self.containing_size - (end + start),
                 }
             },
             _ => return None,
@@ -956,7 +934,7 @@ impl<'a> AbsoluteAxisSolver<'a> {
 
         let mut value_after_safety = self.alignment.value();
         if self.alignment.flags() == AlignFlags::SAFE &&
-            margin_box_axis.length > alignment_container.length
+            margin_box_axis.size > alignment_container.size
         {
             value_after_safety = AlignFlags::START;
         }
@@ -964,10 +942,10 @@ impl<'a> AbsoluteAxisSolver<'a> {
         match value_after_safety {
             AlignFlags::CENTER | AlignFlags::SPACE_AROUND | AlignFlags::SPACE_EVENLY => Some(
                 alignment_container.origin +
-                    ((alignment_container.length - margin_box_axis.length) / 2),
+                    ((alignment_container.size - margin_box_axis.size) / 2),
             ),
             AlignFlags::FLEX_END | AlignFlags::END => Some(
-                alignment_container.origin + alignment_container.length - margin_box_axis.length,
+                alignment_container.origin + alignment_container.size - margin_box_axis.size,
             ),
             _ => None,
         }

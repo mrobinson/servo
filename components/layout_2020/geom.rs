@@ -11,6 +11,7 @@ use serde::Serialize;
 use style::logical_geometry::{BlockFlowDirection, InlineBaseDirection, WritingMode};
 use style::values::computed::{CSSPixelLength, Length, LengthPercentage};
 use style::values::generics::length::GenericLengthPercentageOrAuto as AutoOr;
+use style::values::specified::align::AxisDirection;
 use style::Zero;
 use style_traits::CSSPixel;
 
@@ -43,6 +44,14 @@ pub struct LogicalSides<T> {
     pub inline_end: T,
     pub block_start: T,
     pub block_end: T,
+}
+
+/// A single axis of a rectangle, including an origin and a length of that side.
+/// This is useful when only tracking one dimension.
+#[derive(Clone, Copy)]
+pub(crate) struct RectAxis<T> {
+    pub origin: T,
+    pub size: T,
 }
 
 impl<T: fmt::Debug> fmt::Debug for LogicalVec2<T> {
@@ -554,6 +563,22 @@ impl<T> LogicalRect<T> {
             size: LogicalVec2 {
                 inline: self.size.inline - sides.inline_sum(),
                 block: self.size.block - sides.block_sum(),
+            },
+        }
+    }
+
+    pub(crate) fn get_axis(&self, axis: AxisDirection) -> RectAxis<T>
+    where
+        T: Copy
+    {
+        match axis {
+            AxisDirection::Block => RectAxis {
+                origin: self.start_corner.block,
+                size: self.size.block,
+            },
+            AxisDirection::Inline => RectAxis {
+                origin: self.start_corner.inline,
+                size: self.size.inline,
             },
         }
     }
