@@ -233,7 +233,7 @@ impl<'a> TableLayout<'a> {
 
                     // These formulas differ from the spec, but seem to match Gecko and Blink.
                     let outer_min_content_width = if is_in_fixed_mode {
-                        size.inline.min(max_size.inline).max(min_size.inline)
+                        (size.inline.min(max_size.inline).max(min_size.inline) - padding_border_sums.inline).max(Au(0))
                     } else {
                         inline_content_sizes
                             .min_content
