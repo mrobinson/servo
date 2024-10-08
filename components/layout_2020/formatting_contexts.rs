@@ -274,9 +274,10 @@ impl NonReplacedFormattingContext {
             "inline_content_sizes() got non-auto containing block inline-size",
         );
         if let Some((previous_cb_block_size, result)) = self.content_sizes {
-            if previous_cb_block_size == containing_block_for_children.size.block {
-                return result;
-            }
+            return result;
+            //if previous_cb_block_size == containing_block_for_children.size.block {
+            //    return result;
+            //}
             // TODO: Should we keep multiple caches for various block sizes?
         }
 

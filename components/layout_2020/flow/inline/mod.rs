@@ -107,6 +107,7 @@ use text_run::{
     add_or_get_font, get_font_for_first_font_for_style, TextRun, XI_LINE_BREAKING_CLASS_GL,
     XI_LINE_BREAKING_CLASS_WJ, XI_LINE_BREAKING_CLASS_ZWJ,
 };
+use tracing::instrument;
 use unicode_bidi::{BidiInfo, Level};
 use webrender_api::FontInstanceKey;
 use xi_unicode::linebreak_property;
@@ -1560,6 +1561,11 @@ impl InlineFormattingContext {
     // This works on an already-constructed `InlineFormattingContext`,
     // Which would have to change if/when
     // `BlockContainer::construct` parallelize their construction.
+    #[instrument(
+        name = "InlineFormattingContext::inline_content_sizes",
+        skip_all,
+        fields(servo_profiling = true)
+    )]
     pub(super) fn inline_content_sizes(
         &self,
         layout_context: &LayoutContext,
@@ -1568,6 +1574,11 @@ impl InlineFormattingContext {
         ContentSizesComputation::compute(self, layout_context, containing_block_for_children)
     }
 
+    #[instrument(
+        name = "InlineFormattingContext::layout",
+        skip_all,
+        fields(servo_profiling = true)
+    )]
     pub(super) fn layout(
         &self,
         layout_context: &LayoutContext,

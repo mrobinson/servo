@@ -181,6 +181,7 @@ where
                         independent_formatting_context: IndependentFormattingContext::NonReplaced(
                             non_replaced,
                         ),
+                        block_content_size_cache: Default::default(),
                     })))
                 },
                 FlexLevelJob::Element {
@@ -212,6 +213,7 @@ where
                                 contents,
                                 self.text_decoration_line,
                             ),
+                            block_content_size_cache: Default::default(),
                         }))
                     };
                     box_slot.set(LayoutBox::FlexLevel(box_.clone()));

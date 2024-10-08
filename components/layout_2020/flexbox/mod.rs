@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+use app_units::{Au, MAX_AU};
 use geom::{FlexAxis, MainStartCrossStart};
 use serde::Serialize;
 use servo_arc::Arc as ServoArc;
@@ -14,8 +15,9 @@ use style::values::computed::{AlignContent, JustifyContent};
 use style::values::specified::align::AlignFlags;
 
 use crate::cell::ArcRefCell;
-use crate::formatting_contexts::IndependentFormattingContext;
+use crate::formatting_contexts::{IndependentFormattingContext, IndependentLayout};
 use crate::fragment_tree::BaseFragmentInfo;
+use crate::geom::AuOrAuto;
 use crate::positioned::AbsolutelyPositionedBox;
 
 mod construct;
@@ -112,9 +114,30 @@ pub(crate) enum FlexLevelBox {
     OutOfFlowAbsolutelyPositionedBox(ArcRefCell<AbsolutelyPositionedBox>),
 }
 
-#[derive(Debug, Serialize)]
+
+struct CachedBlockSizeContribution {
+    inline_size: Au,
+    block_size: AuOrAuto,
+    layout: Option<IndependentLayout>,
+}
+
+impl Default for CachedBlockSizeContribution {
+    fn default() -> Self {
+        Self { inline_size: -MAX_AU, block_size: AuOrAuto::Auto, layout: Default::default() }
+    }
+}
+
+#[derive(Serialize)]
 pub(crate) struct FlexItemBox {
     independent_formatting_context: IndependentFormattingContext,
+    #[serde(skip)]
+    block_content_size_cache: ArcRefCell<CachedBlockSizeContribution>,
+}
+
+impl std::fmt::Debug for FlexItemBox {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("FlexItemBox")
+    }
 }
 
 impl FlexItemBox {
