@@ -85,7 +85,7 @@ use script_traits::{
     EventResult, InitialScriptState, JsEvalResult, LayoutMsg, LoadData, LoadOrigin,
     MediaSessionActionType, MouseButton, MouseEventType, NavigationHistoryBehavior, NewLayoutInfo,
     Painter, ProgressiveWebMetricType, ScriptMsg, ScriptToConstellationChan, ScrollState,
-    StructuredSerializedData, Theme, TimerSchedulerMsg, TouchEventType, TouchId,
+    StructuredSerializedData, Theme, TouchEventType, TouchId,
     UntrustedNodeAddress, UpdatePipelineIdReason, WheelDelta, WindowSizeData, WindowSizeType,
 };
 use servo_atoms::Atom;
@@ -574,9 +574,6 @@ pub struct ScriptThread {
     closed_pipelines: DomRefCell<HashSet<PipelineId>>,
 
     #[no_trace]
-    scheduler_chan: IpcSender<TimerSchedulerMsg>,
-
-    #[no_trace]
     content_process_shutdown_chan: Sender<()>,
 
     /// <https://html.spec.whatwg.org/multipage/#microtask-queue>
@@ -1052,7 +1049,6 @@ impl ScriptThread {
                         time_profiler_chan: script_thread.time_profiler_chan.clone(),
                         devtools_chan: script_thread.devtools_chan.clone(),
                         to_constellation_sender: script_thread.script_sender.clone(),
-                        scheduler_chan: script_thread.scheduler_chan.clone(),
                         image_cache: script_thread.image_cache.clone(),
                         is_headless: script_thread.headless,
                         user_agent: script_thread.user_agent.clone(),
@@ -1237,8 +1233,6 @@ impl ScriptThread {
             js_runtime: Rc::new(runtime),
             topmost_mouse_over_target: MutNullableDom::new(Default::default()),
             closed_pipelines: DomRefCell::new(HashSet::new()),
-
-            scheduler_chan: state.scheduler_chan,
 
             content_process_shutdown_chan: state.content_process_shutdown_chan,
 
@@ -3653,7 +3647,6 @@ impl ScriptThread {
             self.devtools_chan.clone(),
             script_to_constellation_chan,
             self.control_chan.clone(),
-            self.scheduler_chan.clone(),
             incomplete.pipeline_id,
             incomplete.parent_info,
             incomplete.window_size,

@@ -14,8 +14,8 @@ use ipc_channel::ipc::IpcSender;
 use js::jsapi::Heap;
 use js::jsval::{JSVal, UndefinedValue};
 use js::rust::HandleValue;
-use script_traits::{TimerEvent, TimerEventId, TimerEventRequest, TimerSchedulerMsg, TimerSource};
 use servo_config::pref;
+use timers::{TimerEvent, TimerEventId, TimerEventRequest, TimerSchedulerProxy, TimerSource};
 
 use crate::dom::bindings::callback::ExceptionHandling::Report;
 use crate::dom::bindings::cell::DomRefCell;
@@ -24,7 +24,7 @@ use crate::dom::bindings::reflector::DomObject;
 use crate::dom::bindings::str::DOMString;
 use crate::dom::document::FakeRequestAnimationFrameCallback;
 use crate::dom::eventsource::EventSourceTimeoutCallback;
-use crate::dom::globalscope::GlobalScope;
+use crate::dom::globalscope::{GlobalScope, TimerListener};
 use crate::dom::htmlmetaelement::RefreshRedirectDue;
 use crate::dom::testbinding::TestBindingCallback;
 use crate::dom::xmlhttprequest::XHRTimeoutCallback;
@@ -37,6 +37,9 @@ pub struct OneshotTimerHandle(i32);
 
 #[derive(DenyPublicFields, JSTraceable, MallocSizeOf)]
 pub struct OneshotTimers {
+    #[ignore_malloc_size_of = "Missing malloc_size_of for task types"]
+    #[no_trace]
+    timer_listener: TimerListener,
     js_timers: JsTimers,
     #[ignore_malloc_size_of = "Defined in std"]
     #[no_trace]
@@ -45,9 +48,6 @@ pub struct OneshotTimers {
     /// when the timer is due.
     timer_event_chan: DomRefCell<Option<IpcSender<TimerEvent>>>,
     #[ignore_malloc_size_of = "Defined in std"]
-    #[no_trace]
-    /// The sender to the timer scheduler in the constellation.
-    scheduler_chan: IpcSender<TimerSchedulerMsg>,
     next_timer_handle: Cell<OneshotTimerHandle>,
     timers: DomRefCell<Vec<OneshotTimer>>,
     suspended_since: Cell<Option<Instant>>,
@@ -124,23 +124,17 @@ impl PartialEq for OneshotTimer {
 }
 
 impl OneshotTimers {
-    pub fn new(scheduler_chan: IpcSender<TimerSchedulerMsg>) -> OneshotTimers {
+    pub fn new(timer_listener: TimerListener) -> OneshotTimers {
         OneshotTimers {
+            timer_listener,
             js_timers: JsTimers::default(),
             timer_event_chan: DomRefCell::new(None),
-            scheduler_chan,
             next_timer_handle: Cell::new(OneshotTimerHandle(1)),
             timers: DomRefCell::new(Vec::new()),
             suspended_since: Cell::new(None),
             suspension_offset: Cell::new(Duration::ZERO),
             expected_event_id: Cell::new(TimerEventId(0)),
         }
-    }
-
-    pub fn setup_scheduling(&self, timer_event_chan: IpcSender<TimerEvent>) {
-        let mut chan = self.timer_event_chan.borrow_mut();
-        assert!(chan.is_none());
-        *chan = Some(timer_event_chan);
     }
 
     pub fn schedule_callback(
@@ -291,23 +285,14 @@ impl OneshotTimers {
         }
 
         let timers = self.timers.borrow();
-
         if let Some(timer) = timers.last() {
             let expected_event_id = self.invalidate_expected_event_id();
-
-            let delay = timer.scheduled_for - Instant::now();
-            let request = TimerEventRequest(
-                self.timer_event_chan
-                    .borrow()
-                    .clone()
-                    .expect("Timer event chan not setup to schedule timers."),
-                timer.source,
-                expected_event_id,
-                delay,
-            );
-            self.scheduler_chan
-                .send(TimerSchedulerMsg(request))
-                .unwrap();
+            TimerSchedulerProxy::get().schedule_timer(TimerEventRequest {
+                callback: self.timer_listener.clone().into_callback(),
+                source: timer.source,
+                id: expected_event_id,
+                duration: timer.scheduled_for - Instant::now(),
+            });
         }
     }
 

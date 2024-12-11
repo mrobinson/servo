@@ -46,6 +46,7 @@
 //!   Note: WebRender has a reduced fork of this crate, so that we can avoid
 //!   publishing this crate on crates.io.
 
+use std::cell::OnceCell;
 use std::hash::{BuildHasher, Hash};
 use std::ops::Range;
 
@@ -465,6 +466,14 @@ where
 impl<T> MallocSizeOf for std::marker::PhantomData<T> {
     fn size_of(&self, _ops: &mut MallocSizeOfOps) -> usize {
         0
+    }
+}
+
+impl<T: MallocSizeOf> MallocSizeOf for OnceCell<T> {
+    fn size_of(&self, ops: &mut MallocSizeOfOps) -> usize {
+        self.get()
+            .map(|interior| interior.size_of(ops))
+            .unwrap_or_default()
     }
 }
 
