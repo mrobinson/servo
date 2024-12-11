@@ -57,8 +57,8 @@ use script_layout_interface::{
 use script_traits::webdriver_msg::{WebDriverJSError, WebDriverJSResult};
 use script_traits::{
     ConstellationControlMsg, DocumentState, HistoryEntryReplacement, LoadData, ScriptMsg,
-    ScriptToConstellationChan, ScrollState, StructuredSerializedData, TimerSchedulerMsg,
-    WindowSizeData, WindowSizeType,
+    ScriptToConstellationChan, ScrollState, StructuredSerializedData, WindowSizeData,
+    WindowSizeType,
 };
 use selectors::attr::CaseSensitivity;
 use servo_arc::Arc as ServoArc;
@@ -2618,7 +2618,6 @@ impl Window {
         devtools_chan: Option<IpcSender<ScriptToDevtoolsControlMsg>>,
         constellation_chan: ScriptToConstellationChan,
         control_chan: IpcSender<ConstellationControlMsg>,
-        scheduler_chan: IpcSender<TimerSchedulerMsg>,
         pipelineid: PipelineId,
         parent_info: Option<PipelineId>,
         window_size: WindowSizeData,
@@ -2660,7 +2659,6 @@ impl Window {
                 mem_profiler_chan,
                 time_profiler_chan,
                 constellation_chan,
-                scheduler_chan,
                 resource_threads,
                 origin,
                 Some(creator_url),
