@@ -51,7 +51,10 @@ pub struct BrowsingContext {
     pub top_level_id: TopLevelBrowsingContextId,
 
     /// The size of the frame.
-    pub size: Size2D<f32, CSSPixel>,
+    ///
+    /// This can be none if the `BrowsingContext` is for an `<iframe>` that
+    /// has not yet been laid out in its containing `Document`.
+    pub size: Option<Size2D<f32, CSSPixel>>,
 
     /// Whether this browsing context is in private browsing mode.
     pub is_private: bool,
@@ -85,7 +88,7 @@ impl BrowsingContext {
         top_level_id: TopLevelBrowsingContextId,
         pipeline_id: PipelineId,
         parent_pipeline_id: Option<PipelineId>,
-        size: Size2D<f32, CSSPixel>,
+        size: Option<Size2D<f32, CSSPixel>>,
         is_private: bool,
         inherited_secure_context: Option<bool>,
         throttled: bool,

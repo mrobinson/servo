@@ -411,7 +411,11 @@ impl Handler {
             .unwrap();
 
         // Steps 7 - 8
-        let viewport = receiver.recv().unwrap().initial_viewport;
+        let viewport = receiver
+            .recv()
+            .unwrap()
+            .initial_viewport
+            .unwrap_or_default();
         if x < 0 || x as f32 > viewport.width || y < 0 || y as f32 > viewport.height {
             return Err(ErrorStatus::MoveTargetOutOfBounds);
         }

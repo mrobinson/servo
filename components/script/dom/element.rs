@@ -3971,7 +3971,13 @@ impl Element {
         if (in_quirks_mode && doc.GetBody().as_deref() == self.downcast::<HTMLElement>()) ||
             (!in_quirks_mode && *self.root_element() == *self)
         {
-            let viewport_dimensions = doc.window().window_size().initial_viewport.round().to_i32();
+            let viewport_dimensions = doc
+                .window()
+                .window_size()
+                .initial_viewport
+                .unwrap_or_default()
+                .round()
+                .to_i32();
             rect.size = Size2D::<i32>::new(viewport_dimensions.width, viewport_dimensions.height);
         }
 

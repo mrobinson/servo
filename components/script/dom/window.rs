@@ -51,14 +51,14 @@ use profile_traits::ipc as ProfiledIpc;
 use profile_traits::mem::ProfilerChan as MemProfilerChan;
 use profile_traits::time::ProfilerChan as TimeProfilerChan;
 use script_layout_interface::{
-    combine_id_with_fragment_type, FragmentType, Layout, PendingImageState, QueryMsg, Reflow,
-    ReflowGoal, ReflowRequest, TrustedNodeAddress,
+    combine_id_with_fragment_type, FragmentType, IFrameSizes, Layout, PendingImageState, QueryMsg,
+    Reflow, ReflowGoal, ReflowRequest, TrustedNodeAddress,
 };
 use script_traits::webdriver_msg::{WebDriverJSError, WebDriverJSResult};
 use script_traits::{
-    ConstellationControlMsg, DocumentState, HistoryEntryReplacement, LoadData, ScriptMsg,
-    ScriptToConstellationChan, ScrollState, StructuredSerializedData, Theme, TimerSchedulerMsg,
-    WindowSizeData, WindowSizeType,
+    ConstellationControlMsg, DocumentState, HistoryEntryReplacement, IFrameSizeMsg, LoadData,
+    ScriptMsg, ScriptToConstellationChan, ScrollState, StructuredSerializedData, Theme,
+    TimerSchedulerMsg, WindowSizeData,
 };
 use selectors::attr::CaseSensitivity;
 use servo_arc::Arc as ServoArc;
@@ -151,7 +151,7 @@ use crate::script_runtime::{
     CanGc, CommonScriptMsg, JSContext, Runtime, ScriptChan, ScriptPort, ScriptThreadEventCategory,
 };
 use crate::script_thread::{
-    ImageCacheMsg, MainThreadScriptChan, MainThreadScriptMsg, ScriptThread,
+    with_script_thread, ImageCacheMsg, MainThreadScriptChan, MainThreadScriptMsg, ScriptThread,
     SendableMainThreadScriptChan,
 };
 use crate::task_manager::TaskManager;
@@ -182,7 +182,7 @@ const INITIAL_REFLOW_DELAY: Duration = Duration::from_millis(200);
 ///    but not display the contents.
 ///
 /// For more information see: <https://github.com/servo/servo/pull/6028>.
-#[derive(Clone, Copy, MallocSizeOf)]
+#[derive(Clone, Copy, Debug, MallocSizeOf)]
 enum LayoutBlocker {
     /// The first load event hasn't been fired and we have not started to parse the `<body>` yet.
     WaitingForParse,
@@ -239,7 +239,7 @@ pub struct Window {
 
     /// Most recent unhandled resize event, if any.
     #[no_trace]
-    unhandled_resize_event: DomRefCell<Option<(WindowSizeData, WindowSizeType)>>,
+    unhandled_resize_event: DomRefCell<Option<WindowSizeData>>,
 
     /// Platform theme.
     #[no_trace]
@@ -377,6 +377,17 @@ pub struct Window {
 
     /// <https://dom.spec.whatwg.org/#window-current-event>
     current_event: DomRefCell<Option<Dom<Event>>>,
+
+    /// Sizes of the various `<iframes>` that we might have on this [`Window`].
+    /// This is used to:
+    ///  - Let same-`ScriptThread` `<iframe>`s know synchronously when their
+    ///    size has changed, ensuring that the next layout has the right size.
+    ///  - Send the proper size for the `<iframe>` during new-Pipeline creation
+    ///    when the `src` attribute changes.
+    ///  - Let the `Constellation` know about `BrowsingContext` (one per `<iframe>`)
+    ///    size changes when an `<iframe>` changes size during layout.
+    #[no_trace]
+    iframe_sizes: RefCell<IFrameSizes>,
 }
 
 impl Window {
@@ -1189,6 +1200,7 @@ impl WindowMethods<crate::DomTypeHolder> for Window {
         self.window_size
             .get()
             .initial_viewport
+            .unwrap_or_default()
             .height
             .to_i32()
             .unwrap_or(0)
@@ -1200,6 +1212,7 @@ impl WindowMethods<crate::DomTypeHolder> for Window {
         self.window_size
             .get()
             .initial_viewport
+            .unwrap_or_default()
             .width
             .to_i32()
             .unwrap_or(0)
@@ -1735,7 +1748,7 @@ impl Window {
 
         // Step 5 & 6
         // TODO: Remove scrollbar dimensions.
-        let viewport = self.window_size.get().initial_viewport;
+        let viewport = self.window_size.get().initial_viewport.unwrap_or_default();
 
         // Step 7 & 8
         // TODO: Consider `block-end` and `inline-end` overflow direction.
@@ -1853,6 +1866,13 @@ impl Window {
             return false;
         }
 
+        //if reflow_goal == ReflowGoal::UpdateTheRendering &&
+        //    self.window_size.get().initial_viewport.is_none()
+        //{
+        //    println!("Suppressing reflow before receiving size {pipeline_id}");
+        //    return false;
+        //}
+
         if condition != Some(ReflowTriggerCondition::PaintPostponed) {
             debug!(
                 "Invalidating layout cache due to reflow condition {:?}",
@@ -1873,6 +1893,7 @@ impl Window {
             None
         };
 
+        //println!("\t\t * REFLOW {:?} {reflow_goal:?} {:?}", pipeline_id, self.window_size.get());
         // On debug mode, print the reflow event information.
         if self.relayout_event {
             debug_reflow_events(pipeline_id, &reflow_goal);
@@ -1958,10 +1979,55 @@ impl Window {
             }
         }
 
+        self.handle_new_iframe_sizes_after_layout(results.iframe_sizes);
+
         document.update_animations_post_reflow();
         self.update_constellation_epoch();
 
         true
+    }
+
+    /// Update the recorded iframe sizes of the contents of layout. When these sizes change,
+    /// send a message to the `Constellation` informing it of the new sizes.
+    fn handle_new_iframe_sizes_after_layout(&self, new_iframe_sizes: IFrameSizes) {
+        let old_iframe_sizes = self.iframe_sizes.replace(new_iframe_sizes);
+        let new_iframe_sizes = self.iframe_sizes.borrow();
+        if new_iframe_sizes.is_empty() {
+            return;
+        }
+
+        // Send resize message to any local `Pipeline`s synchronously, so that the value
+        // can be reflected in the next layout.
+        let device_pixel_ratio = self.device_pixel_ratio();
+        with_script_thread(|script_thread| {
+            for iframe_size in new_iframe_sizes.values() {
+                script_thread.handle_resize_message(
+                    iframe_size.pipeline_id,
+                    WindowSizeData {
+                        initial_viewport: Some(iframe_size.size),
+                        device_pixel_ratio,
+                    },
+                );
+            }
+        });
+
+        // Send asynchronous updates to `Constellation.`
+        let size_messages: Vec<_> = new_iframe_sizes
+            .iter()
+            .filter_map(|(browsing_context_id, size)| {
+                match old_iframe_sizes.get(browsing_context_id) {
+                    Some(old_size) if old_size.size == size.size => None,
+                    _ => Some(IFrameSizeMsg {
+                        browsing_context_id: *browsing_context_id,
+                        size: size.size,
+                    }),
+                }
+            })
+            .collect();
+
+        if !size_messages.is_empty() {
+            self.send_to_constellation(ScriptMsg::IFrameSizes(size_messages));
+        }
     }
 
     /// Reflows the page if it's possible to do so and the page is dirty. Returns true if layout
@@ -1992,7 +2058,7 @@ impl Window {
                     condition.is_none() ||
                         (!updating_the_rendering &&
                             condition == Some(ReflowTriggerCondition::PaintPostponed)) ||
-                        self.layout_blocker.get().layout_blocked()
+                        self.layout_blocked()
                 },
                 "condition was {:?}",
                 condition
@@ -2042,15 +2108,18 @@ impl Window {
 
             let has_sent_idle_message = self.has_sent_idle_message.get();
             let pending_images = !self.pending_layout_images.borrow().is_empty();
+            //let waiting_for_layout = self.Document().needs_reflow().is_some();
 
             if !has_sent_idle_message &&
                 is_ready_state_complete &&
                 !reftest_wait &&
                 !pending_images &&
                 !pending_web_fonts
+            /*&&
+            !waiting_for_layout*/
             {
                 debug!(
-                    "{:?}: Sending DocumentState::Idle to Constellation",
+                    "+++++ {:?}: Sending DocumentState::Idle to Constellation",
                     self.pipeline_id()
                 );
                 let event = ScriptMsg::SetDocumentState(DocumentState::Idle);
@@ -2086,6 +2155,7 @@ impl Window {
             return;
         }
 
+        //println!("\t\t * STARTED PARSING {:?}", self.pipeline_id());
         self.layout_blocker
             .set(LayoutBlocker::Parsing(Instant::now()));
     }
@@ -2100,6 +2170,7 @@ impl Window {
             return;
         }
 
+        //println!("\t\t * FINISHED PARSING {:?}", self.pipeline_id());
         self.layout_blocker
             .set(LayoutBlocker::FiredLoadEventOrParsingTimerExpired);
         self.Document().set_needs_paint(true);
@@ -2119,7 +2190,8 @@ impl Window {
     }
 
     pub(crate) fn layout_blocked(&self) -> bool {
-        self.layout_blocker.get().layout_blocked()
+        self.layout_blocker.get().layout_blocked() /* ||
+                                                   self.window_size.get().initial_viewport.is_none() */
     }
 
     /// If writing a screenshot, synchronously update the layout epoch that it set
@@ -2255,17 +2327,20 @@ impl Window {
         ))
     }
 
-    pub fn inner_window_dimensions_query(
+    /// If the given |browsing_context_id| refers to an `<iframe>` that is an element
+    /// in this [`Window`] and that `<iframe>` has been laid out, return its size.
+    /// Otherwise, return `None`.
+    pub(crate) fn get_iframe_size_if_known(
         &self,
-        browsing_context: BrowsingContextId,
+        browsing_context_id: BrowsingContextId,
         can_gc: CanGc,
     ) -> Option<Size2D<f32, CSSPixel>> {
-        if !self.layout_reflow(QueryMsg::InnerWindowDimensionsQuery, can_gc) {
-            return None;
-        }
-        self.layout
+        // Reflow might fail, but do a best effort to return the right size.
+        self.layout_reflow(QueryMsg::InnerWindowDimensionsQuery, can_gc);
+        self.iframe_sizes
             .borrow()
-            .query_inner_window_dimension(browsing_context)
+            .get(&browsing_context_id)
+            .map(|iframe_size| iframe_size.size)
     }
 
     #[allow(unsafe_code)]
@@ -2432,13 +2507,14 @@ impl Window {
         self.dom_static.windowproxy_handler
     }
 
-    pub fn add_resize_event(&self, event: WindowSizeData, event_type: WindowSizeType) {
+    pub fn add_resize_event(&self, event: WindowSizeData) {
         // Whenever we receive a new resize event we forget about all the ones that came before
         // it, to avoid unnecessary relayouts
-        *self.unhandled_resize_event.borrow_mut() = Some((event, event_type))
+        //println!("Adding resize event: {event:?} for {:?}", self.pipeline_id());
+        *self.unhandled_resize_event.borrow_mut() = Some(event);
     }
 
-    pub fn take_unhandled_resize_event(&self) -> Option<(WindowSizeData, WindowSizeType)> {
+    pub fn take_unhandled_resize_event(&self) -> Option<WindowSizeData> {
         self.unhandled_resize_event.borrow_mut().take()
     }
 
@@ -2550,7 +2626,7 @@ impl Window {
     ///
     /// Returns true if there were any pending resize events.
     pub(crate) fn run_the_resize_steps(&self, can_gc: CanGc) -> bool {
-        let Some((new_size, size_type)) = self.take_unhandled_resize_event() else {
+        let Some(new_size) = self.take_unhandled_resize_event() else {
             return false;
         };
 
@@ -2564,10 +2640,12 @@ impl Window {
             self.pipeline_id(),
             self.window_size(),
         );
+
+        let is_resize = self.window_size().initial_viewport.is_some();
         self.set_window_size(new_size);
 
         // http://dev.w3.org/csswg/cssom-view/#resizing-viewports
-        if size_type == WindowSizeType::Resize {
+        if is_resize {
             let uievent = UIEvent::new(
                 self,
                 DOMString::from("resize"),
@@ -2721,7 +2799,10 @@ impl Window {
 
         let initial_viewport = f32_rect_to_au_rect(UntypedRect::new(
             Point2D::zero(),
-            window_size.initial_viewport.to_untyped(),
+            window_size
+                .initial_viewport
+                .unwrap_or_default()
+                .to_untyped(),
         ));
 
         let win = Box::new(Self {
@@ -2800,6 +2881,7 @@ impl Window {
             layout_marker: DomRefCell::new(Rc::new(Cell::new(true))),
             current_event: DomRefCell::new(None),
             theme: Cell::new(PrefersColorScheme::Light),
+            iframe_sizes: Default::default(),
         });
 
         unsafe { WindowBinding::Wrap(JSContext::from_ptr(runtime.cx()), win) }

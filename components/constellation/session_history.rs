@@ -128,7 +128,10 @@ pub struct SessionHistoryChange {
     pub new_browsing_context_info: Option<NewBrowsingContextInfo>,
 
     /// The size of the viewport for the browsing context.
-    pub window_size: Size2D<f32, CSSPixel>,
+    ///
+    /// This may be `None` if it is for an `<iframe>` that has not yet
+    /// been laid out.
+    pub window_size: Option<Size2D<f32, CSSPixel>>,
 }
 
 /// Represents a pipeline or discarded pipeline in a history entry.

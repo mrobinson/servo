@@ -13,7 +13,7 @@ use ipc_channel::ipc::IpcSender;
 use keyboard_types::{CompositionEvent, KeyboardEvent};
 use script_traits::{
     AnimationTickType, CompositorEvent, GamepadEvent, LogEntry, MediaSessionActionType, Theme,
-    TraversalDirection, WebDriverCommandMsg, WindowSizeData, WindowSizeType,
+    TraversalDirection, WebDriverCommandMsg, WindowSizeData,
 };
 use servo_url::ServoUrl;
 
@@ -45,7 +45,7 @@ pub enum ConstellationMsg {
     /// Request to traverse the joint session history of the provided browsing context.
     TraverseHistory(TopLevelBrowsingContextId, TraversalDirection),
     /// Inform the constellation of a window being resized.
-    WindowSize(TopLevelBrowsingContextId, WindowSizeData, WindowSizeType),
+    WindowSize(TopLevelBrowsingContextId, WindowSizeData),
     /// Inform the constellation of a theme change.
     ThemeChange(Theme),
     /// Requests that the constellation instruct layout to begin a new tick of the animation.

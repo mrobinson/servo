@@ -126,12 +126,12 @@ impl DocumentOrShadowRoot {
         let x = *x as f32;
         let y = *y as f32;
         let point = &Point2D::new(x, y);
-        let viewport = self.window.window_size().initial_viewport;
 
         if !has_browsing_context {
             return None;
         }
 
+        let viewport = self.window.window_size().initial_viewport?;
         if x < 0.0 || y < 0.0 || x > viewport.width || y > viewport.height {
             return None;
         }
@@ -166,13 +166,15 @@ impl DocumentOrShadowRoot {
         let x = *x as f32;
         let y = *y as f32;
         let point = &Point2D::new(x, y);
-        let viewport = self.window.window_size().initial_viewport;
 
         if !has_browsing_context {
             return vec![];
         }
 
         // Step 2
+        let Some(viewport) = self.window.window_size().initial_viewport else {
+            return vec![];
+        };
         if x < 0.0 || y < 0.0 || x > viewport.width || y > viewport.height {
             return vec![];
         }

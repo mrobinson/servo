@@ -285,7 +285,7 @@ pub enum ConstellationControlMsg {
     /// Gives a channel and ID to a layout, as well as the ID of that layout's parent
     AttachLayout(NewLayoutInfo),
     /// Window resized.  Sends a DOM event eventually, but first we combine events.
-    Resize(PipelineId, WindowSizeData, WindowSizeType),
+    Resize(PipelineId, WindowSizeData),
     /// Theme changed.
     ThemeChange(PipelineId, Theme),
     /// Notifies script that window has been resized but to not take immediate action.
@@ -530,7 +530,7 @@ pub struct WheelDelta {
 #[derive(Debug, Deserialize, Serialize)]
 pub enum CompositorEvent {
     /// The window was resized.
-    ResizeEvent(WindowSizeData, WindowSizeType),
+    ResizeEvent(WindowSizeData),
     /// A mouse button state changed.
     MouseButtonEvent(
         MouseEventType,
@@ -766,19 +766,15 @@ pub struct ScrollState {
 pub struct WindowSizeData {
     /// The size of the initial layout viewport, before parsing an
     /// <http://www.w3.org/TR/css-device-adapt/#initial-viewport>
-    pub initial_viewport: Size2D<f32, CSSPixel>,
+    ///
+    /// This might be `None` if this is for an `<iframe>` that starts loading,
+    /// before initial layout. In that case the `<iframe>` itself cannot be
+    /// laid out until the parent `Document` is laid out and communicates its
+    /// size to the child pipeline.
+    pub initial_viewport: Option<Size2D<f32, CSSPixel>>,
 
     /// The resolution of the window in dppx, not including any "pinch zoom" factor.
     pub device_pixel_ratio: Scale<f32, CSSPixel, DevicePixel>,
-}
-
-/// The type of window size change.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, MallocSizeOf, PartialEq, Serialize)]
-pub enum WindowSizeType {
-    /// Initial load.
-    Initial,
-    /// Window resize.
-    Resize,
 }
 
 /// The type of platform theme.

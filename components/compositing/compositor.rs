@@ -32,7 +32,7 @@ use profile_traits::time_profile;
 use script_traits::CompositorEvent::{MouseButtonEvent, MouseMoveEvent, TouchEvent, WheelEvent};
 use script_traits::{
     AnimationState, AnimationTickType, ConstellationControlMsg, MouseButton, MouseEventType,
-    ScrollState, TouchEventType, TouchId, WheelDelta, WindowSizeData, WindowSizeType,
+    ScrollState, TouchEventType, TouchId, WheelDelta, WindowSizeData,
 };
 use servo_geometry::{DeviceIndependentPixel, FramebufferUintLength};
 use style_traits::{CSSPixel, PinchZoomFactor};
@@ -1266,14 +1266,13 @@ impl<Window: WindowMethods + ?Sized> IOCompositor<Window> {
         // The device pixel ratio used by the style system should include the scale from page pixels
         // to device pixels, but not including any pinch zoom.
         let device_pixel_ratio = self.device_pixels_per_page_pixel_not_including_page_zoom();
-        let initial_viewport = rect.size().to_f32() / device_pixel_ratio;
+        let initial_viewport = Some(rect.size().to_f32() / device_pixel_ratio);
         let msg = ConstellationMsg::WindowSize(
             top_level_browsing_context_id,
             WindowSizeData {
                 device_pixel_ratio,
                 initial_viewport,
             },
-            WindowSizeType::Resize,
         );
         if let Err(e) = self.constellation_chan.send(msg) {
             warn!("Sending window resize to constellation failed ({:?}).", e);

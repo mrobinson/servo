@@ -461,7 +461,7 @@ where
         // The division by 1 represents the page's default zoom of 100%,
         // and gives us the appropriate CSSPixel type for the viewport.
         let window_size = WindowSizeData {
-            initial_viewport: viewport_size / Scale::new(1.0),
+            initial_viewport: Some(viewport_size / Scale::new(1.0)),
             device_pixel_ratio: Scale::new(device_pixel_ratio),
         };
 

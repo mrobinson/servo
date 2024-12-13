@@ -86,7 +86,7 @@ use script_traits::{
     LoadOrigin, MediaSessionActionType, MouseButton, MouseEventType, NewLayoutInfo, Painter,
     ProgressiveWebMetricType, ScriptMsg, ScriptToConstellationChan, ScrollState,
     StructuredSerializedData, Theme, TimerSchedulerMsg, TouchEventType, TouchId,
-    UntrustedNodeAddress, UpdatePipelineIdReason, WheelDelta, WindowSizeData, WindowSizeType,
+    UntrustedNodeAddress, UpdatePipelineIdReason, WheelDelta, WindowSizeData,
 };
 use servo_atoms::Atom;
 use servo_config::opts;
@@ -1408,8 +1408,8 @@ impl ScriptThread {
         let _realm = enter_realm(document.window());
         for event in document.take_pending_compositor_events().into_iter() {
             match event {
-                CompositorEvent::ResizeEvent(new_size, size_type) => {
-                    window.add_resize_event(new_size, size_type);
+                CompositorEvent::ResizeEvent(new_size) => {
+                    window.add_resize_event(new_size);
                 },
 
                 CompositorEvent::MouseButtonEvent(
@@ -1647,7 +1647,7 @@ impl ScriptThread {
     //
     // TODO: This is a workaround until rendering opportunities can be triggered from a
     // timer in the script thread.
-    fn schedule_rendering_opportunity_if_necessary(&self) {
+    pub(crate) fn schedule_rendering_opportunity_if_necessary(&self) {
         // If any Document has active animations of rAFs, then we should be receiving
         // regular rendering opportunities from the compositor (or fake animation frame
         // ticks). In this case, don't schedule an opportunity, just wait for the next
@@ -1726,6 +1726,7 @@ impl ScriptThread {
             },
         };
 
+        //println!("--- HANDLING MESSAGES (START)");
         let mut compositor_requested_update_the_rendering = false;
         loop {
             debug!("Handling event: {event:?}");
@@ -1777,8 +1778,8 @@ impl ScriptThread {
                         },
                     )
                 },
-                FromConstellation(ConstellationControlMsg::Resize(id, size, size_type)) => {
-                    self.handle_resize_message(id, size, size_type);
+                FromConstellation(ConstellationControlMsg::Resize(id, size)) => {
+                    self.handle_resize_message(id, size);
                 },
                 FromConstellation(ConstellationControlMsg::Viewport(id, rect)) => self
                     .profile_event(ScriptThreadEventCategory::SetViewport, Some(id), || {
@@ -1931,6 +1932,7 @@ impl ScriptThread {
         // message.
         self.update_the_rendering(compositor_requested_update_the_rendering, can_gc);
 
+        //println!("--- HANDLING MESSAGES (END)");
         true
     }
 
@@ -2825,24 +2827,17 @@ impl ScriptThread {
 
     /// Batch window resize operations into a single "update the rendering" task,
     /// or, if a load is in progress, set the window size directly.
-    fn handle_resize_message(
-        &self,
-        id: PipelineId,
-        size: WindowSizeData,
-        size_type: WindowSizeType,
-    ) {
+    pub(crate) fn handle_resize_message(&self, id: PipelineId, size: WindowSizeData) {
         self.profile_event(ScriptThreadEventCategory::Resize, Some(id), || {
             let window = self.documents.borrow().find_window(id);
             if let Some(ref window) = window {
-                window.add_resize_event(size, size_type);
+                window.add_resize_event(size);
                 return;
             }
             let mut loads = self.incomplete_loads.borrow_mut();
             if let Some(ref mut load) = loads.iter_mut().find(|load| load.pipeline_id == id) {
                 load.window_size = size;
-                return;
             }
-            warn!("resize sent to nonexistent pipeline");
         })
     }
 
@@ -2865,11 +2860,13 @@ impl ScriptThread {
     fn handle_viewport(&self, id: PipelineId, rect: Rect<f32>) {
         let document = self.documents.borrow().find_document(id);
         if let Some(document) = document {
+            //println!("+++ VIEWPORT SENT TO EXISTING PIPELINE: {id:?}");
             document.window().set_page_clip_rect_with_new_viewport(rect);
             return;
         }
         let loads = self.incomplete_loads.borrow();
         if loads.iter().any(|load| load.pipeline_id == id) {
+            //println!("+++ VIEWPORT SENT TO IN PROGRESS LOAD: {id:?}");
             return;
         }
         warn!("Page rect message sent to nonexistent pipeline");
@@ -4200,6 +4197,7 @@ impl ScriptThread {
     }
 
     fn perform_a_microtask_checkpoint(&self, can_gc: CanGc) {
+        //println!("--- MICROTASK CHECKPOINT (START)");
         // Only perform the checkpoint if we're not shutting down.
         if self.can_continue_running_inner() {
             let globals = self
@@ -4216,6 +4214,7 @@ impl ScriptThread {
                 can_gc,
             )
         }
+        //println!("--- MICROTASK CHECKPOINT (END)");
     }
 }
 

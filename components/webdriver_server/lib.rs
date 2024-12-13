@@ -717,7 +717,7 @@ impl Handler {
             .unwrap();
 
         let window_size = receiver.recv().unwrap();
-        let vp = window_size.initial_viewport;
+        let vp = window_size.initial_viewport.unwrap_or_default();
         let window_size_response = WindowRectResponse {
             x: 0,
             y: 0,
@@ -766,7 +766,7 @@ impl Handler {
         });
 
         let window_size = receiver.recv().unwrap();
-        let vp = window_size.initial_viewport;
+        let vp = window_size.initial_viewport.unwrap_or_default();
         let window_size_response = WindowRectResponse {
             x: 0,
             y: 0,

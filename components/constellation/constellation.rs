@@ -144,7 +144,7 @@ use script_traits::{
     PortMessageTask, SWManagerMsg, SWManagerSenders, ScriptMsg as FromScriptMsg,
     ScriptToConstellationChan, ServiceWorkerManagerFactory, ServiceWorkerMsg,
     StructuredSerializedData, Theme, TimerSchedulerMsg, TraversalDirection, UpdatePipelineIdReason,
-    WebDriverCommandMsg, WindowSizeData, WindowSizeType,
+    WebDriverCommandMsg, WindowSizeData,
 };
 use serde::{Deserialize, Serialize};
 use servo_config::{opts, pref};
@@ -927,7 +927,7 @@ where
         top_level_browsing_context_id: TopLevelBrowsingContextId,
         parent_pipeline_id: Option<PipelineId>,
         opener: Option<BrowsingContextId>,
-        initial_window_size: Size2D<f32, CSSPixel>,
+        initial_window_size: Option<Size2D<f32, CSSPixel>>,
         // TODO: we have to provide ownership of the LoadData
         // here, because it will be send on an ipc channel,
         // and ipc channels take onership of their data.
@@ -1109,7 +1109,7 @@ where
         top_level_id: TopLevelBrowsingContextId,
         pipeline_id: PipelineId,
         parent_pipeline_id: Option<PipelineId>,
-        size: Size2D<f32, CSSPixel>,
+        size: Option<Size2D<f32, CSSPixel>>,
         is_private: bool,
         inherited_secure_context: Option<bool>,
         throttled: bool,
@@ -1502,8 +1502,8 @@ where
             FromCompositorMsg::TraverseHistory(top_level_browsing_context_id, direction) => {
                 self.handle_traverse_history_msg(top_level_browsing_context_id, direction);
             },
-            FromCompositorMsg::WindowSize(top_level_browsing_context_id, new_size, size_type) => {
-                self.handle_window_size_msg(top_level_browsing_context_id, new_size, size_type);
+            FromCompositorMsg::WindowSize(top_level_browsing_context_id, new_size) => {
+                self.handle_window_size_msg(top_level_browsing_context_id, new_size);
             },
             FromCompositorMsg::ThemeChange(theme) => {
                 self.handle_theme_change(theme);
@@ -1865,6 +1865,9 @@ where
                     pipeline.title = title;
                 }
             },
+            FromScriptMsg::IFrameSizes(iframe_sizes) => {
+                self.handle_iframe_size_msg(iframe_sizes);
+            },
         }
     }
 
@@ -2138,11 +2141,6 @@ where
     fn handle_request_from_layout(&mut self, message: FromLayoutMsg) {
         trace_layout_msg!(message, "{message:?}");
         match message {
-            // Layout sends new sizes for all subframes. This needs to be reflected by all
-            // frame trees in the navigation context containing the subframe.
-            FromLayoutMsg::IFrameSizes(iframe_sizes) => {
-                self.handle_iframe_size_msg(iframe_sizes);
-            },
             FromLayoutMsg::PendingPaintMetric(pipeline_id, epoch) => {
                 self.handle_pending_paint_metric(pipeline_id, epoch);
             },
@@ -3186,15 +3184,14 @@ where
         for IFrameSizeMsg {
             browsing_context_id,
             size,
-            type_,
         } in iframe_sizes
         {
             let window_size = WindowSizeData {
-                initial_viewport: size,
+                initial_viewport: Some(size),
                 device_pixel_ratio: self.window_size.device_pixel_ratio,
             };
 
-            self.resize_browsing_context(window_size, type_, browsing_context_id);
+            self.resize_browsing_context(window_size, browsing_context_id);
         }
     }
 
@@ -3343,14 +3340,12 @@ where
             HistoryEntryReplacement::Disabled => None,
         };
 
-        // https://github.com/rust-lang/rust/issues/59159
-        let browsing_context_size = browsing_context.size;
-        let browsing_context_throttled = browsing_context.throttled;
-        // TODO(servo#30571) revert to debug_assert_eq!() once underlying bug is fixed
-        #[cfg(debug_assertions)]
-        if !(browsing_context_size == load_info.window_size.initial_viewport) {
-            log::warn!("debug assertion failed! browsing_context_size == load_info.window_size.initial_viewport");
-        }
+        // `BrowsingContext` also has a size, but it might be out of date if a reload has
+        // happened. In that case we want to use the newer size, even if it is still `None`.  An
+        // `<iframe>` size might change throughout the lifetime of a page. We are always guaranteed
+        // to have the most recent size as the `ScriptThread` is also responsible for sending the
+        // value here to set it on the `BrowsingContext`.
+        let initial_window_size = load_info.window_size.initial_viewport;
 
         // Create the new pipeline, attached to the parent and push to pending changes
         self.new_pipeline(
@@ -3359,11 +3354,11 @@ where
             top_level_browsing_context_id,
             Some(parent_pipeline_id),
             None,
-            browsing_context_size,
+            initial_window_size,
             load_info.load_data,
             load_info.sandbox,
             is_private,
-            browsing_context_throttled,
+            browsing_context.throttled,
         );
         self.add_pending_change(SessionHistoryChange {
             top_level_browsing_context_id,
@@ -5239,15 +5234,11 @@ where
         &mut self,
         top_level_browsing_context_id: TopLevelBrowsingContextId,
         new_size: WindowSizeData,
-        size_type: WindowSizeType,
     ) {
-        debug!(
-            "handle_window_size_msg: {:?}",
-            new_size.initial_viewport.to_untyped()
-        );
+        debug!("handle_window_size_msg: {:?}", new_size.initial_viewport);
 
         let browsing_context_id = BrowsingContextId::from(top_level_browsing_context_id);
-        self.resize_browsing_context(new_size, size_type, browsing_context_id);
+        self.resize_browsing_context(new_size, browsing_context_id);
 
         if let Some(response_sender) = self.webdriver.resize_channel.take() {
             let _ = response_sender.send(new_size);
@@ -5334,7 +5325,7 @@ where
             // If the rectangle for this pipeline is zero sized, it will
             // never be painted. In this case, don't query the layout
             // thread as it won't contribute to the final output image.
-            if browsing_context.size == Size2D::zero() {
+            if browsing_context.size == Some(Size2D::zero()) {
                 continue;
             }
 
@@ -5430,7 +5421,6 @@ where
     fn resize_browsing_context(
         &mut self,
         new_size: WindowSizeData,
-        size_type: WindowSizeType,
         browsing_context_id: BrowsingContextId,
     ) {
         if let Some(browsing_context) = self.browsing_contexts.get_mut(&browsing_context_id) {
@@ -5441,11 +5431,9 @@ where
                 None => return warn!("{}: Resized after closing", pipeline_id),
                 Some(pipeline) => pipeline,
             };
-            let _ = pipeline.event_loop.send(ConstellationControlMsg::Resize(
-                pipeline.id,
-                new_size,
-                size_type,
-            ));
+            let _ = pipeline
+                .event_loop
+                .send(ConstellationControlMsg::Resize(pipeline.id, new_size));
             let pipeline_ids = browsing_context
                 .pipelines
                 .iter()
@@ -5473,11 +5461,9 @@ where
                 Some(pipeline) => pipeline,
             };
             if pipeline.browsing_context_id == browsing_context_id {
-                let _ = pipeline.event_loop.send(ConstellationControlMsg::Resize(
-                    pipeline.id,
-                    new_size,
-                    size_type,
-                ));
+                let _ = pipeline
+                    .event_loop
+                    .send(ConstellationControlMsg::Resize(pipeline.id, new_size));
             }
         }
     }

@@ -195,12 +195,11 @@ impl HTMLIFrameElement {
         };
 
         let window_size = WindowSizeData {
-            initial_viewport: window
-                .inner_window_dimensions_query(browsing_context_id, can_gc)
-                .unwrap_or_default(),
+            initial_viewport: window.get_iframe_size_if_known(browsing_context_id, can_gc),
             device_pixel_ratio: window.device_pixel_ratio(),
         };
 
+        //println!("-------- START NEW pipeline: {new_pipeline_id:?} {window_size:?}");
         match pipeline_type {
             PipelineType::InitialAboutBlank => {
                 self.about_blank_pipeline_id.set(Some(new_pipeline_id));
