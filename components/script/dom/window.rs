@@ -1862,7 +1862,7 @@ impl Window {
         let layout_blocked = self.layout_blocker.get().layout_blocked();
         let pipeline_id = self.upcast::<GlobalScope>().pipeline_id();
         if reflow_goal == ReflowGoal::UpdateTheRendering && layout_blocked {
-            debug!("Suppressing pre-load-event reflow pipeline {pipeline_id}");
+            println!("\t * Suppressing pre-load-event reflow pipeline {pipeline_id}");
             return false;
         }
 
@@ -1893,7 +1893,7 @@ impl Window {
             None
         };
 
-        //println!("\t\t * REFLOW {:?} {reflow_goal:?} {:?}", pipeline_id, self.window_size.get());
+        println!("\t\t * REFLOW {:?} {reflow_goal:?} {:?}", pipeline_id, self.window_size.get());
         // On debug mode, print the reflow event information.
         if self.relayout_event {
             debug_reflow_events(pipeline_id, &reflow_goal);
@@ -1979,6 +1979,8 @@ impl Window {
             }
         }
 
+        println!("\t\t\t * animations: {:?}", document.animations().sets);
+        println!("\t\t\t * iframe sizes: {:?}", results.iframe_sizes);
         self.handle_new_iframe_sizes_after_layout(results.iframe_sizes);
 
         document.update_animations_post_reflow();
@@ -2064,8 +2066,8 @@ impl Window {
                 condition
             );
         } else {
-            debug!(
-                "Document ({:?}) doesn't need reflow - skipping it (goal {reflow_goal:?})",
+            println!(
+                "\t\t * Document ({:?}) doesn't need reflow - skipping it (goal {reflow_goal:?})",
                 self.pipeline_id()
             );
         }
@@ -2118,8 +2120,8 @@ impl Window {
             /*&&
             !waiting_for_layout*/
             {
-                debug!(
-                    "+++++ {:?}: Sending DocumentState::Idle to Constellation",
+                println!(
+                    "+++++++++++==+++ {:?}: Sending DocumentState::Idle to Constellation",
                     self.pipeline_id()
                 );
                 let event = ScriptMsg::SetDocumentState(DocumentState::Idle);
@@ -2155,7 +2157,7 @@ impl Window {
             return;
         }
 
-        //println!("\t\t * STARTED PARSING {:?}", self.pipeline_id());
+        println!("\t\t * STARTED PARSING {:?}", self.pipeline_id());
         self.layout_blocker
             .set(LayoutBlocker::Parsing(Instant::now()));
     }
@@ -2170,7 +2172,7 @@ impl Window {
             return;
         }
 
-        //println!("\t\t * FINISHED PARSING {:?}", self.pipeline_id());
+        println!("\t\t * FINISHED PARSING {:?}", self.pipeline_id());
         self.layout_blocker
             .set(LayoutBlocker::FiredLoadEventOrParsingTimerExpired);
         self.Document().set_needs_paint(true);
@@ -2510,12 +2512,11 @@ impl Window {
     pub fn add_resize_event(&self, event: WindowSizeData) {
         // Whenever we receive a new resize event we forget about all the ones that came before
         // it, to avoid unnecessary relayouts
-        //println!("Adding resize event: {event:?} for {:?}", self.pipeline_id());
+        println!("\t * Adding resize event: {event:?} for {:?} replacing: {:?}", self.pipeline_id(), *self.unhandled_resize_event.borrow());
         *self.unhandled_resize_event.borrow_mut() = Some(event);
     }
 
     pub fn take_unhandled_resize_event(&self) -> Option<WindowSizeData> {
-        self.unhandled_resize_event.borrow_mut().take()
     }
 
     pub fn set_page_clip_rect_with_new_viewport(&self, viewport: UntypedRect<f32>) -> bool {
@@ -2626,7 +2627,9 @@ impl Window {
     ///
     /// Returns true if there were any pending resize events.
     pub(crate) fn run_the_resize_steps(&self, can_gc: CanGc) -> bool {
-        let Some(new_size) = self.take_unhandled_resize_event() else {
+
+
+        let Some(new_size) = self.unhandled_resize_event.borrow_mut().take() else {
             return false;
         };
 
@@ -2635,8 +2638,8 @@ impl Window {
         }
 
         let _realm = enter_realm(self);
-        debug!(
-            "Resizing Window for pipeline {:?} from {:?} to {new_size:?}",
+        println!(
+            "\t * Resizing Window for pipeline {:?} from {:?} to {new_size:?}",
             self.pipeline_id(),
             self.window_size(),
         );

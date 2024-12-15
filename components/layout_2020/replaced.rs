@@ -352,6 +352,7 @@ impl ReplacedContents {
                 image_key: video.as_ref().map(|video| video.image_key),
             })],
             ReplacedContentKind::IFrame(iframe) => {
+                println!("&&&&& IFRAME RECT: {rect:?}");
                 let size = Size2D::new(rect.size.width.to_f32_px(), rect.size.height.to_f32_px());
                 layout_context.iframe_sizes.lock().insert(
                     iframe.browsing_context_id,

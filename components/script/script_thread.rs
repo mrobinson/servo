@@ -2860,13 +2860,13 @@ impl ScriptThread {
     fn handle_viewport(&self, id: PipelineId, rect: Rect<f32>) {
         let document = self.documents.borrow().find_document(id);
         if let Some(document) = document {
-            //println!("+++ VIEWPORT SENT TO EXISTING PIPELINE: {id:?}");
+            println!("+++ VIEWPORT SENT TO EXISTING PIPELINE: {id:?}");
             document.window().set_page_clip_rect_with_new_viewport(rect);
             return;
         }
         let loads = self.incomplete_loads.borrow();
         if loads.iter().any(|load| load.pipeline_id == id) {
-            //println!("+++ VIEWPORT SENT TO IN PROGRESS LOAD: {id:?}");
+            println!("+++ VIEWPORT SENT TO IN PROGRESS LOAD: {id:?}");
             return;
         }
         warn!("Page rect message sent to nonexistent pipeline");
