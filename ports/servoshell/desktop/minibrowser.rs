@@ -11,8 +11,7 @@ use dpi::PhysicalSize;
 use egui::text::{CCursor, CCursorRange};
 use egui::text_edit::TextEditState;
 use egui::{
-    pos2, CentralPanel, Frame, Key, Label, Modifiers, PaintCallback, SelectableLabel,
-    TopBottomPanel, Vec2,
+    pos2, CentralPanel, Color32, CornerRadius, Frame, Key, Label, Modifiers, PaintCallback, SelectableLabel, Stroke, TopBottomPanel, Vec2
 };
 use egui_glow::CallbackFn;
 use egui_winit::EventResponse;
@@ -398,6 +397,7 @@ impl Minibrowser {
 
                 state.repaint_servo_if_necessary();
 
+                //ui.painter().rect(rect, CornerRadius::default(), Color32::WHITE, Stroke::NONE, egui::StrokeKind::Outside);
                 if let Some(render_to_parent) = rendering_context.render_to_parent_callback() {
                     ui.painter().add(PaintCallback {
                         rect,

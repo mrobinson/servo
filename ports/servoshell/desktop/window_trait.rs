@@ -57,4 +57,5 @@ pub trait WindowPortsMethods: WindowMethods {
     }
 
     fn hide_ime(&self) {}
+    fn resize_if_necessary(&self) {}
 }

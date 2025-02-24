@@ -73,6 +73,7 @@ pub struct Window {
     /// The `RenderingContext` of Servo itself. This is used to render Servo results
     /// temporarily until they can be blitted into the egui scene.
     rendering_context: Rc<OffscreenRenderingContext>,
+    new_size: Cell<Option<PhysicalSize<u32>>>,
 }
 
 impl Window {
@@ -156,6 +157,7 @@ impl Window {
             toolbar_height: Cell::new(Default::default()),
             window_rendering_context,
             rendering_context,
+            new_size: Cell::new(None),
         }
     }
 
@@ -612,10 +614,7 @@ impl WindowPortsMethods for Window {
                 state.servo().start_shutting_down();
             },
             WindowEvent::Resized(new_size) => {
-                if self.inner_size.get() != new_size {
-                    self.window_rendering_context.resize(new_size);
-                    self.inner_size.set(new_size);
-                }
+                self.new_size.set(Some(new_size));
             },
             WindowEvent::ThemeChanged(theme) => {
                 webview.notify_theme_change(match theme {
@@ -657,6 +656,20 @@ impl WindowPortsMethods for Window {
             },
             _ => {},
         }
+    }
+
+    fn resize_if_necessary(&self) {
+        let Some(new_size) = self.new_size.get() else {
+            return;
+        };
+
+        self.new_size.set(None);
+
+        if self.inner_size.get() != new_size {
+            self.window_rendering_context.resize(new_size);
+            self.inner_size.set(new_size);
+        }
+
     }
 
     fn new_glwindow(

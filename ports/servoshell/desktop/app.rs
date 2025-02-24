@@ -332,6 +332,7 @@ impl ApplicationHandler<WakerEvent> for App {
             // WARNING: do not defer painting or presenting to some later tick of the event
             // loop or servoshell may become unresponsive! (servo#30312)
             if let Some(ref mut minibrowser) = self.minibrowser {
+                window.resize_if_necessary();
                 minibrowser.update(window.winit_window().unwrap(), state, "RedrawRequested");
                 minibrowser.paint(window.winit_window().unwrap());
             }
