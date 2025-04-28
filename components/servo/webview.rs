@@ -547,7 +547,7 @@ impl WebView {
     /// always paint, unless the `Opts::wait_for_stable_image` option is enabled. In
     /// that case, this might do nothing. Returns true if a paint was actually performed.
     pub fn paint(&self) -> bool {
-        self.inner().compositor.borrow_mut().render()
+        self.inner().compositor.borrow_mut().render(self.id())
     }
 }
 

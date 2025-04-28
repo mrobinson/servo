@@ -302,7 +302,7 @@ impl Layout for LayoutThread {
         let client_point = DevicePoint::from_untyped(point);
         let results = self
             .compositor_api
-            .hit_test(Some(self.id.into()), client_point, flags);
+            .hit_test(self.webview_id, Some(self.id.into()), client_point, flags);
 
         results.iter().map(|result| result.node).collect()
     }
@@ -490,7 +490,7 @@ impl LayoutThread {
         // Let webrender know about this pipeline by sending an empty display list.
         config
             .compositor_api
-            .send_initial_transaction(config.id.into());
+            .send_initial_transaction(config.webview_id, config.id.into());
 
         let mut font = Font::initial_values();
         let default_font_size = pref!(fonts_default_size);

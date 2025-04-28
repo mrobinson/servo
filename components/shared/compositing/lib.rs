@@ -105,7 +105,7 @@ pub enum CompositorMsg {
     WebDriverMouseMoveEvent(WebViewId, f32, f32),
 
     /// Inform WebRender of the existence of this pipeline.
-    SendInitialTransaction(WebRenderPipelineId),
+    SendInitialTransaction(WebViewId, WebRenderPipelineId),
     /// Perform a scroll operation.
     SendScrollNode(
         WebViewId,
@@ -125,6 +125,7 @@ pub enum CompositorMsg {
     /// Perform a hit test operation. The result will be returned via
     /// the provided channel sender.
     HitTest(
+        WebViewId,
         Option<WebRenderPipelineId>,
         DevicePoint,
         HitTestFlags,
@@ -205,8 +206,8 @@ impl CrossProcessCompositorApi {
     }
 
     /// Inform WebRender of the existence of this pipeline.
-    pub fn send_initial_transaction(&self, pipeline: WebRenderPipelineId) {
-        if let Err(e) = self.0.send(CompositorMsg::SendInitialTransaction(pipeline)) {
+    pub fn send_initial_transaction(&self, webview_id: WebViewId, pipeline: WebRenderPipelineId) {
+        if let Err(e) = self.0.send(CompositorMsg::SendInitialTransaction(webview_id, pipeline)) {
             warn!("Error sending initial transaction: {}", e);
         }
     }
@@ -267,13 +268,14 @@ impl CrossProcessCompositorApi {
     /// and a result is available.
     pub fn hit_test(
         &self,
+        webview_id: WebViewId,
         pipeline: Option<WebRenderPipelineId>,
         point: DevicePoint,
         flags: HitTestFlags,
     ) -> Vec<CompositorHitTestResult> {
         let (sender, receiver) = ipc::channel().unwrap();
         self.0
-            .send(CompositorMsg::HitTest(pipeline, point, flags, sender))
+            .send(CompositorMsg::HitTest(webview_id, pipeline, point, flags, sender))
             .expect("error sending hit test");
         receiver.recv().expect("error receiving hit test result")
     }

@@ -25,7 +25,7 @@ use webrender_api::units::{
     DeviceIntPoint, DeviceIntRect, DevicePixel, DevicePoint, DeviceRect, LayoutVector2D,
 };
 use webrender_api::{
-    ExternalScrollId, HitTestFlags, RenderReasons, SampledScrollOffset, ScrollLocation,
+    DocumentId, ExternalScrollId, HitTestFlags, RenderReasons, SampledScrollOffset, ScrollLocation
 };
 
 use crate::IOCompositor;
@@ -61,6 +61,8 @@ enum ScrollZoomEvent {
 pub(crate) struct WebViewRenderer {
     /// The [`WebViewId`] of the `WebView` associated with this [`WebViewDetails`].
     pub id: WebViewId,
+    /// The WebRender [`DocumentId`] that this `WebView` is rendering into.
+    pub document_id: DocumentId,
     /// The renderer's view of the embedding layer `WebView` as a trait implementation,
     /// so that the renderer doesn't need to depend on the embedding layer. This avoids
     /// a dependency cycle.
@@ -105,11 +107,13 @@ impl WebViewRenderer {
         global: Rc<RefCell<ServoRenderer>>,
         renderer_webview: Box<dyn WebViewTrait>,
         viewport_details: ViewportDetails,
+        document_id: DocumentId,
     ) -> Self {
         let hidpi_scale_factor = viewport_details.hidpi_scale_factor;
         let size = viewport_details.size * viewport_details.hidpi_scale_factor;
         Self {
             id: renderer_webview.id(),
+            document_id,
             webview: renderer_webview,
             root_pipeline_id: None,
             rect: DeviceRect::from_origin_and_size(DevicePoint::origin(), size),
@@ -312,7 +316,7 @@ impl WebViewRenderer {
         let Some(result) = self
             .global
             .borrow()
-            .hit_test_at_point(point, get_pipeline_details)
+            .hit_test_at_point(self.document_id, point, get_pipeline_details)
         else {
             return;
         };
@@ -400,7 +404,7 @@ impl WebViewRenderer {
         let Some(result) = self
             .global
             .borrow()
-            .hit_test_at_point(event.point, get_pipeline_details)
+            .hit_test_at_point(self.document_id, event.point, get_pipeline_details)
         else {
             return false;
         };
@@ -793,7 +797,7 @@ impl WebViewRenderer {
 
         let mut transaction = Transaction::new();
         if zoom_changed {
-            compositor.send_root_pipeline_display_list_in_transaction(&mut transaction);
+            compositor.send_root_pipeline_display_list_in_transaction(self, &mut transaction);
         }
 
         if let Some((pipeline_id, external_id, offset)) = scroll_result {
@@ -809,7 +813,7 @@ impl WebViewRenderer {
         }
 
         compositor.generate_frame(&mut transaction, RenderReasons::APZ);
-        self.global.borrow_mut().send_transaction(transaction);
+        self.global.borrow_mut().send_transaction(self.document_id, transaction);
     }
 
     /// Perform a hit test at the given [`DevicePoint`] and apply the [`ScrollLocation`]
@@ -839,6 +843,7 @@ impl WebViewRenderer {
             .global
             .borrow()
             .hit_test_at_point_with_flags_and_pipeline(
+                self.document_id,
                 cursor,
                 HitTestFlags::FIND_ALL,
                 None,
@@ -974,6 +979,35 @@ impl WebViewRenderer {
         let screen_geometry = self.webview.screen_geometry().unwrap_or_default();
         (screen_geometry.available_size.to_f32() / self.hidpi_scale_factor).to_i32()
     }
+
+    /// Update the given transaction with the scroll offsets of all active scroll nodes in
+    /// the WebRender scene. This is necessary because WebRender does not preserve scroll
+    /// offsets between scroll tree modifications. If a display list could potentially
+    /// modify a scroll tree branch, WebRender needs to have scroll offsets for that
+    /// branch.
+    ///
+    /// TODO(mrobinson): Could we only send offsets for the branch being modified
+    /// and not the entire scene?
+    pub(crate) fn update_transaction_with_all_scroll_offsets(&self, transaction: &mut Transaction) {
+        for details in self.pipelines.values() {
+            for node in details.scroll_tree.nodes.iter() {
+                let (Some(offset), Some(external_id)) = (node.offset(), node.external_id())
+                else {
+                    continue;
+                };
+
+                let offset = LayoutVector2D::new(-offset.x, -offset.y);
+                transaction.set_scroll_offsets(
+                    external_id,
+                    vec![SampledScrollOffset {
+                        offset,
+                        generation: 0,
+                    }],
+                );
+            }
+        }
+    }
+
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
