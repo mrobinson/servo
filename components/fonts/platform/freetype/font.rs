@@ -580,8 +580,7 @@ unsafe fn set_variations_for_font(
     library: &FreeTypeLibraryHandle,
 ) -> Result<(), &'static str> {
     if !FT_HAS_MULTIPLE_MASTERS(face) ||
-        variations.is_empty() ||
-        !servo_config::pref!(layout_variable_fonts_enabled)
+        variations.is_empty()
     {
         // Nothing to do
         return Ok(());
