@@ -25,8 +25,8 @@ use super::core_text_font_cache::CoreTextFontCache;
 use super::font_list::LocalFontIdentifier;
 use crate::{
     CBDT, COLR, FontData, FontIdentifier, FontMetrics, FontTableMethods, FontTableTag,
-    FontTemplateDescriptor, FractionalPixel, GlyphId, KERN, PlatformFontMethods, SBIX,
-    map_platform_values_to_style_values,
+    FontTemplateDescriptor, FractionalPixel, GlyphId, KERN, PlatformFontMethods, SBIX, Tag,
+    VariationValue, map_platform_values_to_style_values,
 };
 
 const KERN_PAIR_LEN: usize = 6;
@@ -169,12 +169,14 @@ impl PlatformFont {
         font_identifier: FontIdentifier,
         data: Option<&FontData>,
         requested_size: Option<Au>,
+        variations: Vec<(Tag, VariationValue)>,
     ) -> Result<PlatformFont, &'static str> {
         let size = match requested_size {
             Some(s) => s.to_f64_px(),
             None => 0.0,
         };
-        let Some(core_text_font) = CoreTextFontCache::core_text_font(font_identifier, data, size)
+        let Some(core_text_font) =
+            CoreTextFontCache::core_text_font(font_identifier, data, size, variations)
         else {
             return Err("Could not generate CTFont for FontTemplateData");
         };
@@ -193,15 +195,22 @@ impl PlatformFontMethods for PlatformFont {
         font_identifier: FontIdentifier,
         data: &FontData,
         requested_size: Option<Au>,
+        variations: Vec<(Tag, VariationValue)>,
     ) -> Result<PlatformFont, &'static str> {
-        Self::new(font_identifier, Some(data), requested_size)
+        Self::new(font_identifier, Some(data), requested_size, variations)
     }
 
     fn new_from_local_font_identifier(
         font_identifier: LocalFontIdentifier,
         requested_size: Option<Au>,
+        variations: Vec<(Tag, VariationValue)>,
     ) -> Result<PlatformFont, &'static str> {
-        Self::new(FontIdentifier::Local(font_identifier), None, requested_size)
+        Self::new(
+            FontIdentifier::Local(font_identifier),
+            None,
+            requested_size,
+            variations,
+        )
     }
 
     fn descriptor(&self) -> FontTemplateDescriptor {

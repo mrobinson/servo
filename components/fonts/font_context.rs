@@ -375,7 +375,8 @@ impl FontContext {
             return string == "truetype" ||
                 string == "opentype" ||
                 string == "woff" ||
-                string == "woff2";
+                string == "woff2" ||
+                string == "woff2-variations";
         }
 
         false

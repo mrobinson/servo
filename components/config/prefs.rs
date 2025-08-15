@@ -396,7 +396,7 @@ impl Preferences {
             // TODO(mrobinson): This should likely be based on the number of processors.
             layout_threads: 3,
             layout_unimplemented: false,
-            layout_variable_fonts_enabled: false,
+            layout_variable_fonts_enabled: true,
             layout_writing_mode_enabled: false,
             media_glvideo_enabled: false,
             media_testing_enabled: false,
