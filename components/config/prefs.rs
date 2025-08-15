@@ -38,10 +38,7 @@ pub fn set(preferences: Preferences) {
         "layout.container-queries.enabled",
         preferences.layout_container_queries_enabled,
     );
-    stylo_config::set_bool(
-        "layout.variable_fonts.enabled",
-        preferences.layout_variable_fonts_enabled,
-    );
+    stylo_config::set_bool("layout.variable_fonts.enabled", true);
 
     *PREFERENCES.write().unwrap() = preferences;
 }
@@ -217,7 +214,6 @@ pub struct Preferences {
     pub layout_flexbox_enabled: bool,
     pub layout_threads: i64,
     pub layout_unimplemented: bool,
-    pub layout_variable_fonts_enabled: bool,
     pub layout_writing_mode_enabled: bool,
     /// Enable hardware acceleration for video playback.
     pub media_glvideo_enabled: bool,
@@ -396,7 +392,6 @@ impl Preferences {
             // TODO(mrobinson): This should likely be based on the number of processors.
             layout_threads: 3,
             layout_unimplemented: false,
-            layout_variable_fonts_enabled: true,
             layout_writing_mode_enabled: false,
             media_glvideo_enabled: false,
             media_testing_enabled: false,

@@ -12,7 +12,9 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use app_units::Au;
-use dwrote::{FontCollection, FontFace, FontFile};
+use dwrote::{
+    DWRITE_FONT_AXIS_VALUE, DWRITE_FONT_SIMULATIONS_NONE, FontCollection, FontFace, FontFile,
+};
 use euclid::default::{Point2D, Rect, Size2D};
 use log::{debug, warn};
 use style::Zero;
@@ -26,7 +28,7 @@ use webrender_api::FontInstanceFlags;
 use super::font_list::LocalFontIdentifier;
 use crate::{
     FontData, FontIdentifier, FontMetrics, FontTableMethods, FontTableTag, FontTemplateDescriptor,
-    FractionalPixel, GlyphId, PlatformFontMethods, ot_tag,
+    FractionalPixel, GlyphId, PlatformFontMethods, Tag, VariationValue, ot_tag,
 };
 
 // 1em = 12pt = 16px, assuming 72 points per inch and 96 px per inch
@@ -109,6 +111,34 @@ impl PlatformFont {
             scaled_du_to_px: scaled_design_units_to_pixels,
         })
     }
+
+    fn new_with_variations(
+        font_face: FontFace,
+        pt_size: Option<Au>,
+        variations: Vec<(Tag, VariationValue)>,
+    ) -> Result<Self, &'static str> {
+        if variations.is_empty() {
+            return Self::new(font_face, pt_size);
+        }
+
+        // On FreeType and CoreText platforms, the platform layer is able to read the minimum, maxmimum,
+        // and default values of each axis. This doesn't seem possible here and it seems that Gecko
+        // also just sets the value of the axis based on the values from the style as well.
+        let variations: Vec<_> = variations
+            .into_iter()
+            .map(|(tag, value)| DWRITE_FONT_AXIS_VALUE {
+                axisTag: tag.swap_bytes(),
+                value: value.0,
+            })
+            .collect();
+
+        let Some(font_face) =
+            font_face.create_font_face_with_variations(DWRITE_FONT_SIMULATIONS_NONE, &variations)
+        else {
+            return Err("Could not adapt FontFace to given variations");
+        };
+        Self::new(font_face, pt_size)
+    }
 }
 
 impl PlatformFontMethods for PlatformFont {
@@ -116,20 +146,19 @@ impl PlatformFontMethods for PlatformFont {
         _font_identifier: FontIdentifier,
         data: &FontData,
         pt_size: Option<Au>,
+        variations: Vec<(Tag, VariationValue)>,
     ) -> Result<Self, &'static str> {
         let font_face = FontFile::new_from_buffer(Arc::new(data.clone()))
             .ok_or("Could not create FontFile")?
-            .create_face(
-                0, /* face_index */
-                dwrote::DWRITE_FONT_SIMULATIONS_NONE,
-            )
+            .create_face(0 /* face_index */, DWRITE_FONT_SIMULATIONS_NONE)
             .map_err(|_| "Could not create FontFace")?;
-        Self::new(font_face, pt_size)
+        Self::new_with_variations(font_face, pt_size, variations)
     }
 
     fn new_from_local_font_identifier(
         font_identifier: LocalFontIdentifier,
         pt_size: Option<Au>,
+        variations: Vec<(Tag, VariationValue)>,
     ) -> Result<PlatformFont, &'static str> {
         let font_face = FontCollection::system()
             .font_from_descriptor(&font_identifier.font_descriptor)
@@ -137,9 +166,8 @@ impl PlatformFontMethods for PlatformFont {
             .flatten()
             .ok_or("Could not create Font from descriptor")?
             .create_font_face();
-        Self::new(font_face, pt_size)
+        Self::new_with_variations(font_face, pt_size, variations)
     }
-
     fn descriptor(&self) -> FontTemplateDescriptor {
         // We need the font (DWriteFont) in order to be able to query things like
         // the family name, face name, weight, etc.  On Windows 10, the

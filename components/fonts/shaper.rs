@@ -414,7 +414,7 @@ impl Shaper {
                 })
             }
 
-            if servo_config::pref!(layout_variable_fonts_enabled) {
+            if !options.variation_settings.is_empty() {
                 for (tag, value) in &options.variation_settings {
                     let variations = &[hb_variation_t {
                         tag: *tag,

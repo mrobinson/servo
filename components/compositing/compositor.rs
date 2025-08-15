@@ -1514,12 +1514,6 @@ impl IOCompositor {
         flags: FontInstanceFlags,
         variations: Vec<FontVariation>,
     ) {
-        let variations = if pref!(layout_variable_fonts_enabled) {
-            variations
-        } else {
-            vec![]
-        };
-
         let mut transaction = Transaction::new();
 
         let font_instance_options = FontInstanceOptions {
