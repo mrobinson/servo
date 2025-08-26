@@ -5,7 +5,6 @@
 use canvas_traits::canvas::*;
 use compositing_traits::CrossProcessCompositorApi;
 use euclid::default::{Point2D, Rect, Size2D, Transform2D};
-use log::warn;
 use pixels::Snapshot;
 use webrender_api::ImageKey;
 

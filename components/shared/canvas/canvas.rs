@@ -763,84 +763,6 @@ impl FromStr for CompositionOrBlending {
     }
 }
 
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Default,
-    Deserialize,
-    Display,
-    EnumString,
-    MallocSizeOf,
-    PartialEq,
-    Serialize,
-)]
-pub enum TextAlign {
-    #[default]
-    Start,
-    End,
-    Left,
-    Right,
-    Center,
-}
-
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Default,
-    Deserialize,
-    Display,
-    EnumString,
-    MallocSizeOf,
-    PartialEq,
-    Serialize,
-)]
-pub enum TextBaseline {
-    Top,
-    Hanging,
-    Middle,
-    #[default]
-    Alphabetic,
-    Ideographic,
-    Bottom,
-}
-
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Default,
-    Deserialize,
-    Display,
-    EnumString,
-    MallocSizeOf,
-    PartialEq,
-    Serialize,
-)]
-pub enum Direction {
-    Ltr,
-    Rtl,
-    #[default]
-    Inherit,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, MallocSizeOf, Serialize)]
-pub struct TextMetrics {
-    pub width: f32,
-    pub actual_boundingbox_left: f32,
-    pub actual_boundingbox_right: f32,
-    pub actual_boundingbox_ascent: f32,
-    pub actual_boundingbox_descent: f32,
-    pub font_boundingbox_ascent: f32,
-    pub font_boundingbox_descent: f32,
-    pub em_height_ascent: f32,
-    pub em_height_descent: f32,
-    pub hanging_baseline: f32,
-    pub alphabetic_baseline: f32,
-    pub ideographic_baseline: f32,
-}
-
 #[derive(Debug, Deserialize, Serialize)]
 pub struct GlyphAndPosition {
     pub id: u32,
@@ -858,14 +780,15 @@ pub struct TextRun {
     pub font: CanvasFont,
     pub pt_size: f32,
     pub glyphs_and_positions: Vec<GlyphAndPosition>,
-    pub size: Size2D<f64>,
+    pub advance: f32,
+    pub bounds: Rect<f64>,
 }
 
 impl std::fmt::Debug for TextRun {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TextRun")
             .field("glyphs_and_positions", &self.glyphs_and_positions)
-            .field("size", &self.size)
+            .field("size", &self.bounds)
             .finish()
     }
 }
