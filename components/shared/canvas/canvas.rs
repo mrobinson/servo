@@ -8,6 +8,7 @@ use std::str::FromStr;
 use euclid::Angle;
 use euclid::approxeq::ApproxEq;
 use euclid::default::{Point2D, Rect, Size2D, Transform2D};
+use fonts_traits::{FontDataAndIndex, LocalFontIdentifier};
 use ipc_channel::ipc::IpcSender;
 use kurbo::{BezPath, ParamCurveNearest as _, PathEl, Point, Shape, Triangle};
 use malloc_size_of::MallocSizeOf;
@@ -16,8 +17,6 @@ use pixels::IpcSnapshot;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 use style::color::AbsoluteColor;
-use style::properties::style_structs::Font as FontStyleStruct;
-use style::servo_arc::Arc as ServoArc;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Path(pub BezPath);
@@ -437,14 +436,6 @@ pub struct LineOptions {
     pub dash_offset: f64,
 }
 
-#[derive(Debug, Deserialize, MallocSizeOf, Serialize)]
-pub struct TextOptions {
-    #[ignore_malloc_size_of = "Arc"]
-    pub font: Option<ServoArc<FontStyleStruct>>,
-    pub align: TextAlign,
-    pub baseline: TextBaseline,
-}
-
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Deserialize, Serialize)]
 pub enum CanvasMsg {
@@ -493,13 +484,9 @@ pub enum Canvas2dMsg {
         Transform2D<f64>,
     ),
     FillText(
-        String,
-        f64,
-        f64,
-        Option<f64>,
+        Rect<f64>,
+        Vec<TextRun>,
         FillOrStrokeStyle,
-        bool,
-        TextOptions,
         ShadowOptions,
         CompositionOptions,
         Transform2D<f64>,
@@ -512,7 +499,6 @@ pub enum Canvas2dMsg {
         Transform2D<f64>,
     ),
     GetImageData(Option<Rect<u32>>, IpcSender<IpcSnapshot>),
-    MeasureText(String, IpcSender<TextMetrics>, TextOptions),
     PutImageData(Rect<u32>, IpcSnapshot),
     StrokeRect(
         Rect<f32>,
@@ -853,4 +839,33 @@ pub struct TextMetrics {
     pub hanging_baseline: f32,
     pub alphabetic_baseline: f32,
     pub ideographic_baseline: f32,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct GlyphAndPosition {
+    pub id: u32,
+    pub point: Point2D<f32>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub enum CanvasFont {
+    Local(LocalFontIdentifier),
+    Web(FontDataAndIndex),
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct TextRun {
+    pub font: CanvasFont,
+    pub pt_size: f32,
+    pub glyphs_and_positions: Vec<GlyphAndPosition>,
+    pub size: Size2D<f64>,
+}
+
+impl std::fmt::Debug for TextRun {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TextRun")
+            .field("glyphs_and_positions", &self.glyphs_and_positions)
+            .field("size", &self.size)
+            .finish()
+    }
 }
