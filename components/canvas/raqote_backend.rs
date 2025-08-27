@@ -4,7 +4,6 @@
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use canvas_traits::canvas::*;
 use compositing_traits::SerializableImageData;
@@ -315,56 +314,33 @@ impl GenericDrawTarget for raqote::DrawTarget {
                 })
                 .collect();
 
-            // TODO: raqote uses font-kit to rasterize glyphs, but font-kit fails an assertion when
-            // using color bitmap fonts in the FreeType backend. For now, simply do not render these
-            // type of fonts.
-            //if run.font.has_color_bitmap_or_colr_table() {
-            //    continue;
-            //}
+            SHARED_FONT_CACHE.with(|font_cache| {
+                let identifier = &text_run.font.identifier;
+                if !font_cache.borrow().contains_key(identifier) {
+                    let Some(font_data_and_index) = text_run.font.font_data_and_index() else {
+                        return;
+                    };
+                    let data = std::sync::Arc::new(font_data_and_index.data.as_ref().to_vec());
+                    let Ok(font) = Font::from_bytes(data, font_data_and_index.index) else {
+                        return;
+                    };
+                    font_cache.borrow_mut().insert(identifier.clone(), font);
+                }
 
-            let font_data = match text_run.font {
-                CanvasFont::Local(local_font_identifier) => {
-                    local_font_identifier.font_data_and_index()
-                },
-                CanvasFont::Web(font_data_and_index) => Some(font_data_and_index),
-            };
+                let font_cache = font_cache.borrow();
+                let Some(font) = font_cache.get(identifier) else {
+                    return;
+                };
 
-            let Some(font_data) = font_data else {
-                continue;
-            };
-
-            let data = Arc::new(font_data.data.as_ref().into());
-            let Ok(font) = Font::from_bytes(data, font_data.index) else {
-                return;
-            };
-
-            //SHARED_FONT_CACHE.with(|font_cache| {
-            //    let identifier = &text_run.font;
-            //    if !font_cache.borrow().contains_key(&identifier) {
-            //        let Ok(font_data_and_index) = run.font.font_data_and_index() else {
-            //            return;
-            //        };
-            //        let data = std::sync::Arc::new(font_data_and_index.data.as_ref().to_vec());
-            //        let Ok(font) = Font::from_bytes(data, font_data_and_index.index) else {
-            //            return;
-            //        };
-            //        font_cache.borrow_mut().insert(identifier.clone(), font);
-            //    }
-
-            //    let font_cache = font_cache.borrow();
-            //    let Some(font) = font_cache.get(&identifier) else {
-            //        return;
-            //    };
-
-            self.draw_glyphs(
-                &font,
-                text_run.pt_size,
-                &ids,
-                &positions,
-                &source(&pattern),
-                &draw_options,
-            );
-            //})
+                self.draw_glyphs(
+                    font,
+                    text_run.pt_size,
+                    &ids,
+                    &positions,
+                    &source(&pattern),
+                    &draw_options,
+                );
+            })
         }
     }
 

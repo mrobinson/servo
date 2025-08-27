@@ -2429,14 +2429,15 @@ impl UnshapedTextRun<'_> {
             })
             .collect();
 
-        let canvas_font = match font.identifier() {
-            FontIdentifier::Local(local_font_identifier) => {
-                CanvasFont::Local(local_font_identifier)
-            },
-            FontIdentifier::Web(_) => {
-                let font_and_data = font.font_data_and_index().ok()?;
-                CanvasFont::Web(font_and_data.clone())
-            },
+        let identifier = font.identifier();
+        let font_data = match &identifier {
+            FontIdentifier::Local(_) => None,
+            FontIdentifier::Web(_) => Some(font.font_data_and_index().ok()?),
+        }
+        .cloned();
+        let canvas_font = CanvasFont {
+            identifier,
+            data: font_data,
         };
 
         Some(TextRun {

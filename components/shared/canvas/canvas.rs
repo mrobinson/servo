@@ -8,7 +8,7 @@ use std::str::FromStr;
 use euclid::Angle;
 use euclid::approxeq::ApproxEq;
 use euclid::default::{Point2D, Rect, Size2D, Transform2D};
-use fonts_traits::{FontDataAndIndex, LocalFontIdentifier};
+use fonts_traits::{FontDataAndIndex, FontIdentifier};
 use ipc_channel::ipc::IpcSender;
 use kurbo::{BezPath, ParamCurveNearest as _, PathEl, Point, Shape, Triangle};
 use malloc_size_of::MallocSizeOf;
@@ -770,9 +770,23 @@ pub struct GlyphAndPosition {
 }
 
 #[derive(Deserialize, Serialize)]
-pub enum CanvasFont {
-    Local(LocalFontIdentifier),
-    Web(FontDataAndIndex),
+pub struct CanvasFont {
+    /// A [`FontIdentifier`] for this [`CanvasFont`], maybe either `Local` or `Web`.
+    pub identifier: FontIdentifier,
+    /// If this font is a web font, this field contains the data for the font. If
+    /// the font is a local font, it will be `None`.
+    pub data: Option<FontDataAndIndex>,
+}
+
+impl CanvasFont {
+    pub fn font_data_and_index(&self) -> Option<FontDataAndIndex> {
+        self.data.clone().or_else(|| match &self.identifier {
+            FontIdentifier::Local(local_font_identifier) => {
+                local_font_identifier.font_data_and_index()
+            },
+            FontIdentifier::Web(_) => None,
+        })
+    }
 }
 
 #[derive(Deserialize, Serialize)]
