@@ -2,7 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 
 use base::id::WebViewId;
 use embedder_traits::{CompositorHitTestResult, InputEventId, TouchEventType, TouchId};
@@ -15,6 +16,7 @@ use webrender_api::units::{DeviceIntPoint, DevicePixel, DevicePoint, LayoutVecto
 
 use self::TouchSequenceState::*;
 use crate::IOCompositor;
+use crate::compositor::{RepaintReason, ServoRenderer};
 use crate::refresh_driver::RefreshDriverObserver;
 use crate::webview_renderer::{ScrollEvent, ScrollZoomEvent, WebViewRenderer};
 
@@ -52,12 +54,17 @@ const FLING_MIN_SCREEN_PX: f32 = 3.0;
 const FLING_MAX_SCREEN_PX: f32 = 4000.0;
 
 pub struct TouchHandler {
+    /// The [`WebViewId`] that this [`TouchHandler`] is associated with.
+    webview_id: WebViewId,
+    /// The [`TouchSequencId`] of the current [`TouchSequenceInfo`].
     pub current_sequence_id: TouchSequenceId,
     // todo: VecDeque + modulo arithmetic would be more efficient.
     touch_sequence_map: FxHashMap<TouchSequenceId, TouchSequenceInfo>,
     /// A set of [`InputEventId`]s for touch events that have been sent to the Constellation
     /// and have not been handled yet.
     pub(crate) pending_touch_input_events: RefCell<FxHashMap<InputEventId, PendingTouchInputEvent>>,
+    /// Whether or not the [`FlingRefreshDriverObserver`] is currently observing frames for fling.
+    observing_frames_for_fling: Cell<bool>,
 }
 
 /// Whether the default move action is allowed or not.
@@ -203,7 +210,7 @@ pub(crate) struct FlingAction {
 }
 
 impl TouchHandler {
-    pub fn new() -> Self {
+    pub fn new(webview_id: WebViewId) -> Self {
         let finished_info = TouchSequenceInfo {
             state: TouchSequenceState::Finished,
             active_touch_points: vec![],
@@ -219,16 +226,12 @@ impl TouchHandler {
         let mut touch_sequence_map = FxHashMap::default();
         touch_sequence_map.insert(TouchSequenceId::new(), finished_info);
         TouchHandler {
+            webview_id,
             current_sequence_id: TouchSequenceId::new(),
             touch_sequence_map,
             pending_touch_input_events: Default::default(),
+            observing_frames_for_fling: Default::default(),
         }
-    }
-
-    pub(crate) fn currently_in_touch_sequence(&self) -> bool {
-        self.touch_sequence_map
-            .get(&self.current_sequence_id)
-            .is_some_and(|sequence| sequence.state != TouchSequenceState::Finished)
     }
 
     pub(crate) fn set_handling_touch_move(&mut self, sequence_id: TouchSequenceId, flag: bool) {
@@ -301,10 +304,14 @@ impl TouchHandler {
         debug_assert!(old.is_some(), "Sequence already removed?");
     }
 
-    pub fn get_current_touch_sequence_mut(&mut self) -> &mut TouchSequenceInfo {
+    pub(crate) fn get_current_touch_sequence_mut(&mut self) -> &mut TouchSequenceInfo {
         self.touch_sequence_map
             .get_mut(&self.current_sequence_id)
             .expect("Current Touch sequence does not exist")
+    }
+
+    fn try_get_current_touch_sequence(&self) -> Option<&TouchSequenceInfo> {
+        self.touch_sequence_map.get(&self.current_sequence_id)
     }
 
     fn try_get_current_touch_sequence_mut(&mut self) -> Option<&mut TouchSequenceInfo> {
@@ -316,6 +323,7 @@ impl TouchHandler {
             .get(&sequence_id)
             .expect("Touch sequence not found.")
     }
+
     pub(crate) fn get_touch_sequence_mut(
         &mut self,
         sequence_id: TouchSequenceId,
@@ -633,6 +641,34 @@ impl TouchHandler {
     ) -> Option<PendingTouchInputEvent> {
         self.pending_touch_input_events.borrow_mut().remove(&id)
     }
+
+    pub(crate) fn add_touch_move_refresh_obsever_if_necessary(
+        &self,
+        servo_renderer: Rc<RefCell<ServoRenderer>>,
+    ) {
+        if self.observing_frames_for_fling.get() {
+            return;
+        }
+
+        let Some(current_touch_sequence) = self.try_get_current_touch_sequence() else {
+            return;
+        };
+
+        if !matches!(
+            current_touch_sequence.state,
+            TouchSequenceState::Flinging { .. },
+        ) {
+            return;
+        }
+
+        let servo_renderer = servo_renderer.borrow();
+        servo_renderer
+            .refresh_driver
+            .add_observer(Rc::new(FlingRefreshDriverObserver {
+                webview_id: self.webview_id,
+            }));
+        servo_renderer.set_needs_repaint(RepaintReason::StartedFlinging);
+    }
 }
 
 /// This data structure is used to store information about touch events that are
@@ -643,7 +679,7 @@ pub(crate) struct PendingTouchInputEvent {
     pub sequence_id: TouchSequenceId,
 }
 
-pub(crate) struct FlingRefreshDriverObserver {
+struct FlingRefreshDriverObserver {
     pub webview_id: WebViewId,
 }
 

@@ -79,6 +79,9 @@ pub enum WebRenderDebugOption {
 
 /// Data that is shared by all WebView renderers.
 pub struct ServoRenderer {
+    /// Tracks whether or not the view needs to be repainted.
+    needs_repaint: Cell<RepaintReason>,
+
     /// The [`BaseRefreshDriver`] which manages the painting of `WebView`s during animations.
     pub(crate) refresh_driver: Rc<BaseRefreshDriver>,
 
@@ -139,9 +142,6 @@ pub struct IOCompositor {
     /// Our [`WebViewRenderer`]s, one for every `WebView`.
     webview_renderers: WebViewManager<WebViewRenderer>,
 
-    /// Tracks whether or not the view needs to be repainted.
-    needs_repaint: Cell<RepaintReason>,
-
     /// The webrender renderer.
     webrender: Option<webrender::Renderer>,
 
@@ -173,6 +173,8 @@ bitflags! {
         const NewWebRenderFrame = 1 << 2;
         /// The window has been resized and will need to be synchronously repainted.
         const Resize = 1 << 3;
+        /// we've started flinging
+        const StartedFlinging = 1 << 4;
     }
 }
 
@@ -274,6 +276,20 @@ impl Drop for ServoRenderer {
 impl ServoRenderer {
     pub fn shutdown_state(&self) -> ShutdownState {
         self.shutdown_state.get()
+    }
+
+    pub(crate) fn set_needs_repaint(&self, reason: RepaintReason) {
+        let mut needs_repaint = self.needs_repaint.get();
+        needs_repaint.insert(reason);
+        self.needs_repaint.set(needs_repaint);
+    }
+
+    pub(crate) fn needs_repaint(&self) -> bool {
+        let repaint_reason = self.needs_repaint.get();
+        if repaint_reason.is_empty() {
+            return false;
+        }
+        !self.refresh_driver.wait_to_paint(repaint_reason)
     }
 
     pub(crate) fn hit_test_at_point(&self, point: DevicePoint) -> Vec<CompositorHitTestResult> {
@@ -446,6 +462,7 @@ impl IOCompositor {
 
         let compositor = IOCompositor {
             global: Rc::new(RefCell::new(ServoRenderer {
+                needs_repaint: Cell::default(),
                 refresh_driver,
                 animation_refresh_driver_observer,
                 shutdown_state: state.shutdown_state,
@@ -465,7 +482,6 @@ impl IOCompositor {
                 webgpu_image_map,
             })),
             webview_renderers: WebViewManager::default(),
-            needs_repaint: Cell::default(),
             webrender: Some(webrender),
             rendering_context,
             pending_frames: Default::default(),
@@ -540,22 +556,11 @@ impl IOCompositor {
     }
 
     pub(crate) fn set_needs_repaint(&self, reason: RepaintReason) {
-        let mut needs_repaint = self.needs_repaint.get();
-        needs_repaint.insert(reason);
-        self.needs_repaint.set(needs_repaint);
+        self.global.borrow().set_needs_repaint(reason);
     }
 
     pub fn needs_repaint(&self) -> bool {
-        let repaint_reason = self.needs_repaint.get();
-        if repaint_reason.is_empty() {
-            return false;
-        }
-
-        !self
-            .global
-            .borrow()
-            .refresh_driver
-            .wait_to_paint(repaint_reason)
+        self.global.borrow().needs_repaint()
     }
 
     pub fn finish_shutting_down(&mut self) {
@@ -1402,7 +1407,10 @@ impl IOCompositor {
 
         // We've painted the default target, which means that from the embedder's perspective,
         // the scene no longer needs to be repainted.
-        self.needs_repaint.set(RepaintReason::empty());
+        self.global
+            .borrow()
+            .needs_repaint
+            .set(RepaintReason::empty());
     }
 
     #[servo_tracing::instrument(skip_all)]
