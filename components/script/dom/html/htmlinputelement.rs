@@ -373,13 +373,13 @@ impl RangeInputShadowTree {
 
         slider_fill
             .upcast::<Node>()
-            .set_implemented_pseudo_element(PseudoElement::ServoSliderFill);
+            .set_implemented_pseudo_element(PseudoElement::SliderFill);
         slider_thumb
             .upcast::<Node>()
-            .set_implemented_pseudo_element(PseudoElement::ServoSliderThumb);
+            .set_implemented_pseudo_element(PseudoElement::SliderThumb);
         slider_track
             .upcast::<Node>()
-            .set_implemented_pseudo_element(PseudoElement::ServoSliderTrack);
+            .set_implemented_pseudo_element(PseudoElement::SliderTrack);
 
         Self {
             slider_fill: slider_fill.as_traced(),
@@ -389,23 +389,12 @@ impl RangeInputShadowTree {
     }
 
     fn update(&self, input_element: &HTMLInputElement, can_gc: CanGc) {
-        if input_element.owner_document().has_script_or_layout_blocker() {
-            let range_input_element = DomRoot::from_ref(input_element);
-            input_element.owner_document().add_delayed_task(task!(
-                ThumbPositionUpdate: |range_input_element: DomRoot<HTMLInputElement>| {
-                    range_input_element.get_or_create_shadow_tree(CanGc::note()).update(&range_input_element, CanGc::note());
-                }
-            ));
-            return;
-        }
-        self.update_range_position(input_element, can_gc);
-    }
-
-    fn update_range_position(&self, input_element: &HTMLInputElement, can_gc: CanGc) {
         let value = input_element.Value();
         let min = input_element.minimum().unwrap_or(0.0);
         let max = input_element.maximum().unwrap_or(100.0);
-        let value_num = input_element.convert_string_to_number(&value.str()).unwrap_or(0.0);
+        let value_num = input_element
+            .convert_string_to_number(&value.str())
+            .unwrap_or(0.0);
         let percent = if (max - min) < f64::EPSILON {
             0.0
         } else {
@@ -413,29 +402,14 @@ impl RangeInputShadowTree {
             (clamped_value - min) / (max - min) * 100.0
         };
 
-        let thumb_rect_width: f64 = self
-            .slider_thumb
-            .upcast::<Node>()
-            .border_box()
-            .unwrap_or_default()
-            .width()
-            .to_f64_px();
-
-        let thumb_style = format!(
-            "inset-inline-start: calc({}% - {}px)",
-            percent,
-            thumb_rect_width * percent / 100.0
-        );
-        let progress_style = format!("width: {percent}%;");
-
         self.slider_thumb.set_string_attribute(
             &local_name!("style"),
-            thumb_style.into(),
+            format!("inset-inline-start: {percent}%").into(),
             can_gc,
         );
         self.slider_fill.set_string_attribute(
             &local_name!("style"),
-            progress_style.into(),
+            format!("width: {percent}%;").into(),
             can_gc,
         );
     }
