@@ -2,28 +2,23 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use std::cell::{Cell, RefCell};
-use std::cmp::Ordering;
-use std::path::PathBuf;
+use std::cell::{Cell, RefCell, RefMut};
 use std::ptr::NonNull;
-use std::str::FromStr;
 use std::{f64, ptr};
 
 use base::generic_channel::GenericSender;
 use base::text::Utf16CodeUnitLength;
-use cssparser::{Parser, ParserInput};
 use dom_struct::dom_struct;
 use embedder_traits::{
-    EmbedderControlRequest, FilePickerRequest, FilterPattern, InputMethodRequest, InputMethodType,
+    EmbedderControlRequest, InputMethodRequest,
     RgbColor, SelectedFile,
 };
 use encoding_rs::Encoding;
 use fonts::{ByteIndex, TextByteRange};
-use html5ever::{LocalName, Prefix, QualName, local_name, ns};
-use itertools::Itertools;
+use html5ever::{local_name, LocalName, Prefix};
 use js::context::JSContext;
 use js::jsapi::{
-    ClippedTime, DateGetMsecSinceEpoch, Handle, JS_ClearPendingException, JSObject, NewDateObject,
+    ClippedTime, DateGetMsecSinceEpoch, Handle, JSObject, JS_ClearPendingException, NewDateObject,
     NewUCRegExpObject, ObjectIsDate, RegExpFlag_UnicodeSets, RegExpFlags,
 };
 use js::jsval::UndefinedValue;
@@ -32,23 +27,13 @@ use js::rust::{HandleObject, MutableHandleObject};
 use layout_api::wrapper_traits::{ScriptSelection, SharedSelection};
 use script_bindings::codegen::GenericBindings::AttrBinding::AttrMethods;
 use script_bindings::codegen::GenericBindings::CharacterDataBinding::CharacterDataMethods;
-use script_bindings::codegen::GenericBindings::DocumentBinding::DocumentMethods;
 use script_bindings::domstring::parse_floating_point_number;
 use style::attr::AttrValue;
-use style::color::{AbsoluteColor, ColorFlags, ColorSpace};
-use style::context::QuirksMode;
-use style::parser::ParserContext;
-use style::selector_parser::PseudoElement;
 use style::str::split_commas;
-use style::stylesheets::CssRuleType;
-use style::stylesheets::origin::Origin;
-use style::values::specified::color::Color;
-use style_traits::{ParsingMode, ToCss};
 use stylo_atoms::Atom;
 use stylo_dom::ElementState;
-use time::{Month, OffsetDateTime, Time};
-use unicode_bidi::{BidiClass, bidi_class};
-use url::Url;
+use time::OffsetDateTime;
+use unicode_bidi::{bidi_class, BidiClass};
 use webdriver::error::ErrorStatus;
 
 use crate::clipboard_provider::EmbedderClipboardProvider;
@@ -64,12 +49,12 @@ use crate::dom::bindings::codegen::Bindings::NodeBinding::{GetRootNodeOptions, N
 use crate::dom::bindings::error::{Error, ErrorResult};
 use crate::dom::bindings::inheritance::Castable;
 use crate::dom::bindings::root::{Dom, DomRoot, LayoutDom, MutNullableDom};
-use crate::dom::bindings::str::{DOMString, FromInputValueString, ToInputValueString, USVString};
+use crate::dom::bindings::str::{DOMString, USVString};
 use crate::dom::clipboardevent::{ClipboardEvent, ClipboardEventType};
 use crate::dom::compositionevent::CompositionEvent;
 use crate::dom::document::Document;
 use crate::dom::document_embedder_controls::ControlElement;
-use crate::dom::element::{AttributeMutation, CustomElementCreationMode, Element, ElementCreator};
+use crate::dom::element::{AttributeMutation, Element};
 use crate::dom::event::{Event, EventBubbles, EventCancelable, EventComposed};
 use crate::dom::eventtarget::EventTarget;
 use crate::dom::file::File;
@@ -79,9 +64,14 @@ use crate::dom::html::htmldatalistelement::HTMLDataListElement;
 use crate::dom::html::htmlelement::HTMLElement;
 use crate::dom::html::htmlfieldsetelement::HTMLFieldSetElement;
 use crate::dom::html::htmlformelement::{
-    FormControl, FormDatum, FormDatumValue, FormSubmitterElement, HTMLFormElement, ResetFrom,
-    SubmittedFrom,
+    FormControl, FormDatum, FormDatumValue, FormSubmitterElement, HTMLFormElement, SubmittedFrom,
 };
+use crate::dom::inputtype::colorinputtype::ColorInputShadowTree;
+use crate::dom::inputtype::radioinputtype::{
+    broadcast_radio_checked, perform_radio_group_validation,
+};
+use crate::dom::inputtype::textinputtype::TextInputWidgetShadowTree;
+pub(crate) use crate::dom::inputtype::InputType;
 use crate::dom::keyboardevent::KeyboardEvent;
 use crate::dom::node::{
     BindContext, CloneChildrenFlag, Node, NodeDamage, NodeTraits, ShadowIncluding, UnbindContext,
@@ -90,18 +80,12 @@ use crate::dom::nodelist::NodeList;
 use crate::dom::text::Text;
 use crate::dom::textcontrol::{TextControlElement, TextControlSelection};
 use crate::dom::types::{CharacterData, FocusEvent, MouseEvent};
-use crate::dom::validation::{Validatable, is_barred_by_datalist_ancestor};
+use crate::dom::validation::{is_barred_by_datalist_ancestor, Validatable};
 use crate::dom::validitystate::{ValidationFlags, ValidityState};
 use crate::dom::virtualmethods::VirtualMethods;
 use crate::realms::enter_realm;
 use crate::script_runtime::{CanGc, JSContext as SafeJSContext};
 use crate::textinput::{ClipboardEventFlags, IsComposing, KeyReaction, Lines, TextInput};
-
-const DEFAULT_SUBMIT_VALUE: &str = "Submit";
-const DEFAULT_RESET_VALUE: &str = "Reset";
-const PASSWORD_REPLACEMENT_CHAR: char = '●';
-const DEFAULT_FILE_INPUT_VALUE: &str = "No file chosen";
-const DEFAULT_FILE_INPUT_MULTIPLE_VALUE: &str = "No files chosen";
 
 #[derive(Clone, JSTraceable, MallocSizeOf)]
 #[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
@@ -128,195 +112,6 @@ impl TextValueShadowTree {
         if character_data.Data() != value {
             character_data.SetData(value);
         }
-    }
-}
-
-#[derive(Clone, JSTraceable, MallocSizeOf)]
-#[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
-/// Contains reference to text control inner editor and placeholder container element in the UA
-/// shadow tree for `text`, `password`, `url`, `tel`, and `email` input. The following is the
-/// structure of the shadow tree.
-///
-/// ```
-/// <input type="text">
-///     #shadow-root
-///         <div id="inner-container">
-///             <div id="input-editor"></div>
-///             <div id="input-placeholder"></div>
-///         </div>
-/// </input>
-/// ```
-///
-// TODO(stevennovaryo): We are trying to use CSS to mimic Chrome and Firefox's layout for the <input> element.
-//                      But, this could be slower in performance and does have some discrepancies. For example,
-//                      they would try to vertically align <input> text baseline with the baseline of other
-//                      TextNode within an inline flow. Another example is the horizontal scroll.
-// FIXME(#38263): Refactor these logics into a TextControl wrapper that would decouple all textual input.
-struct TextInputWidgetShadowTree {
-    inner_container: Dom<Element>,
-    text_container: Dom<Element>,
-    placeholder_container: DomRefCell<Option<Dom<Element>>>,
-}
-
-impl TextInputWidgetShadowTree {
-    fn new(cx: &mut JSContext, shadow_root: &Node) -> Self {
-        let document = shadow_root.owner_document();
-        let inner_container = Element::create(
-            cx,
-            QualName::new(None, ns!(html), local_name!("div")),
-            None,
-            &document,
-            ElementCreator::ScriptCreated,
-            CustomElementCreationMode::Asynchronous,
-            None,
-        );
-
-        Node::replace_all(cx, Some(inner_container.upcast()), shadow_root.upcast());
-        inner_container
-            .upcast::<Node>()
-            .set_implemented_pseudo_element(PseudoElement::ServoTextControlInnerContainer);
-
-        let text_container = create_ua_widget_div_with_text_node(
-            cx,
-            &document,
-            inner_container.upcast(),
-            PseudoElement::ServoTextControlInnerEditor,
-            false,
-        );
-
-        Self {
-            inner_container: inner_container.as_traced(),
-            text_container: text_container.as_traced(),
-            placeholder_container: DomRefCell::new(None),
-        }
-    }
-
-    /// Initialize the placeholder container only when it is necessary. This would help the performance of input
-    /// element with shadow dom that is quite bulky.
-    fn init_placeholder_container_if_necessary(
-        &self,
-        cx: &mut JSContext,
-        host: &HTMLInputElement,
-    ) -> Option<DomRoot<Element>> {
-        if let Some(placeholder_container) = &*self.placeholder_container.borrow() {
-            return Some(placeholder_container.root_element());
-        }
-        // If there is no placeholder text and we haven't already created one then it is
-        // not necessary to initialize a new placeholder container.
-        if host.placeholder.borrow().is_empty() {
-            return None;
-        }
-
-        let placeholder_container = create_ua_widget_div_with_text_node(
-            cx,
-            &host.owner_document(),
-            self.inner_container.upcast::<Node>(),
-            PseudoElement::Placeholder,
-            true,
-        );
-        *self.placeholder_container.borrow_mut() = Some(placeholder_container.as_traced());
-        Some(placeholder_container)
-    }
-
-    fn placeholder_character_data(
-        &self,
-        cx: &mut JSContext,
-        input_element: &HTMLInputElement,
-    ) -> Option<DomRoot<CharacterData>> {
-        self.init_placeholder_container_if_necessary(cx, input_element)
-            .and_then(|placeholder_container| {
-                let first_child = placeholder_container.upcast::<Node>().GetFirstChild()?;
-                Some(DomRoot::from_ref(first_child.downcast::<CharacterData>()?))
-            })
-    }
-
-    fn update_placeholder(&self, cx: &mut JSContext, input_element: &HTMLInputElement) {
-        if let Some(character_data) = self.placeholder_character_data(cx, input_element) {
-            let placeholder_value = input_element.placeholder.borrow().clone();
-            if character_data.Data() != placeholder_value {
-                character_data.SetData(placeholder_value);
-            }
-        }
-    }
-
-    fn value_character_data(&self) -> Option<DomRoot<CharacterData>> {
-        Some(DomRoot::from_ref(
-            self.text_container
-                .upcast::<Node>()
-                .GetFirstChild()?
-                .downcast::<CharacterData>()?,
-        ))
-    }
-
-    // TODO(stevennovaryo): The rest of textual input shadow dom structure should act
-    // like an exstension to this one.
-    fn update(&self, input_element: &HTMLInputElement) {
-        // The addition of zero-width space here forces the text input to have an inline formatting
-        // context that might otherwise be trimmed if there's no text. This is important to ensure
-        // that the input element is at least as tall as the line gap of the caret:
-        // <https://drafts.csswg.org/css-ui/#element-with-default-preferred-size>.
-        //
-        // This is also used to ensure that the caret will still be rendered when the input is empty.
-        // TODO: Could append `<br>` element to prevent collapses and avoid this hack, but we would
-        //       need to fix the rendering of caret beforehand.
-        let value = input_element.Value();
-        let value_text = match (value.is_empty(), input_element.input_type()) {
-            // For a password input, we replace all of the character with its replacement char.
-            (false, InputType::Password) => value
-                .str()
-                .chars()
-                .map(|_| PASSWORD_REPLACEMENT_CHAR)
-                .collect::<String>()
-                .into(),
-            (false, _) => value,
-            (true, _) => "\u{200B}".into(),
-        };
-
-        if let Some(character_data) = self.value_character_data() {
-            if character_data.Data() != value_text {
-                character_data.SetData(value_text);
-            }
-        }
-    }
-}
-
-#[derive(Clone, JSTraceable, MallocSizeOf)]
-#[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
-/// Contains references to the elements in the shadow tree for `<input type=color>`.
-///
-/// The shadow tree consists of a single div with the currently selected color as
-/// the background.
-struct ColorInputShadowTree {
-    color_value: Dom<Element>,
-}
-
-impl ColorInputShadowTree {
-    fn new(cx: &mut JSContext, shadow_root: &Node) -> Self {
-        let color_value = Element::create(
-            cx,
-            QualName::new(None, ns!(html), local_name!("div")),
-            None,
-            &shadow_root.owner_document(),
-            ElementCreator::ScriptCreated,
-            CustomElementCreationMode::Asynchronous,
-            None,
-        );
-
-        Node::replace_all(cx, Some(color_value.upcast()), shadow_root.upcast());
-        color_value
-            .upcast::<Node>()
-            .set_implemented_pseudo_element(PseudoElement::ColorSwatch);
-
-        Self {
-            color_value: color_value.as_traced(),
-        }
-    }
-
-    fn update(&self, input_element: &HTMLInputElement, can_gc: CanGc) {
-        let value = input_element.Value();
-        let style = format!("background-color: {value}");
-        self.color_value
-            .set_string_attribute(&local_name!("style"), style.into(), can_gc);
     }
 }
 
@@ -379,236 +174,8 @@ impl InputElementShadowTree {
     }
 }
 
-/// Create a div element with a text node within an UA Widget and either append or prepend it to
-/// the designated parent. This is used to create the text container for input elements.
-fn create_ua_widget_div_with_text_node(
-    cx: &mut JSContext,
-    document: &Document,
-    parent: &Node,
-    implemented_pseudo: PseudoElement,
-    as_first_child: bool,
-) -> DomRoot<Element> {
-    let el = Element::create(
-        cx,
-        QualName::new(None, ns!(html), local_name!("div")),
-        None,
-        document,
-        ElementCreator::ScriptCreated,
-        CustomElementCreationMode::Asynchronous,
-        None,
-    );
-
-    parent
-        .upcast::<Node>()
-        .AppendChild(cx, el.upcast::<Node>())
-        .unwrap();
-    el.upcast::<Node>()
-        .set_implemented_pseudo_element(implemented_pseudo);
-    let text_node = document.CreateTextNode("".into(), CanGc::from_cx(cx));
-
-    if !as_first_child {
-        el.upcast::<Node>()
-            .AppendChild(cx, text_node.upcast::<Node>())
-            .unwrap();
-    } else {
-        el.upcast::<Node>()
-            .InsertBefore(
-                cx,
-                text_node.upcast::<Node>(),
-                el.upcast::<Node>().GetFirstChild().as_deref(),
-            )
-            .unwrap();
-    }
-    el
-}
-
-/// <https://html.spec.whatwg.org/multipage/#attr-input-type>
-#[derive(Clone, Copy, Debug, Default, JSTraceable, PartialEq, MallocSizeOf)]
-pub(crate) enum InputType {
-    /// <https://html.spec.whatwg.org/multipage/#button-state-(type=button)>
-    Button,
-
-    /// <https://html.spec.whatwg.org/multipage/#checkbox-state-(type=checkbox)>
-    Checkbox,
-
-    /// <https://html.spec.whatwg.org/multipage/#color-state-(type=color)>
-    Color,
-
-    /// <https://html.spec.whatwg.org/multipage/#date-state-(type=date)>
-    Date,
-
-    /// <https://html.spec.whatwg.org/multipage/#local-date-and-time-state-(type=datetime-local)>
-    DatetimeLocal,
-
-    /// <https://html.spec.whatwg.org/multipage/#email-state-(type=email)>
-    Email,
-
-    /// <https://html.spec.whatwg.org/multipage/#file-upload-state-(type=file)>
-    File,
-
-    /// <https://html.spec.whatwg.org/multipage/#hidden-state-(type=hidden)>
-    Hidden,
-
-    /// <https://html.spec.whatwg.org/multipage/#image-button-state-(type=image)>
-    Image,
-
-    /// <https://html.spec.whatwg.org/multipage/#month-state-(type=month)>
-    Month,
-
-    /// <https://html.spec.whatwg.org/multipage/#number-state-(type=number)>
-    Number,
-
-    /// <https://html.spec.whatwg.org/multipage/#password-state-(type=password)>
-    Password,
-
-    /// <https://html.spec.whatwg.org/multipage/#radio-button-state-(type=radio)>
-    Radio,
-
-    /// <https://html.spec.whatwg.org/multipage/#range-state-(type=range)>
-    Range,
-
-    /// <https://html.spec.whatwg.org/multipage/#reset-button-state-(type=reset)>
-    Reset,
-
-    /// <https://html.spec.whatwg.org/multipage/#text-(type=text)-state-and-search-state-(type=search)>
-    Search,
-
-    /// <https://html.spec.whatwg.org/multipage/#submit-button-state-(type=submit)>
-    Submit,
-
-    /// <https://html.spec.whatwg.org/multipage/#telephone-state-(type=tel)>
-    Tel,
-
-    /// <https://html.spec.whatwg.org/multipage/#text-(type=text)-state-and-search-state-(type=search)>
-    #[default]
-    Text,
-
-    /// <https://html.spec.whatwg.org/multipage/#time-state-(type=time)>
-    Time,
-
-    /// <https://html.spec.whatwg.org/multipage/#url-state-(type=url)>
-    Url,
-
-    /// <https://html.spec.whatwg.org/multipage/#week-state-(type=week)>
-    Week,
-}
-
-impl InputType {
-    /// Defines which input type that should perform like a text input,
-    /// specifically when it is interacting with JS. Note that Password
-    /// is not included here since it is handled slightly differently,
-    /// with placeholder characters shown rather than the underlying value.
-    pub(crate) fn is_textual(&self) -> bool {
-        matches!(
-            *self,
-            InputType::Date |
-                InputType::DatetimeLocal |
-                InputType::Email |
-                InputType::Hidden |
-                InputType::Month |
-                InputType::Number |
-                InputType::Range |
-                InputType::Search |
-                InputType::Tel |
-                InputType::Text |
-                InputType::Time |
-                InputType::Url |
-                InputType::Week
-        )
-    }
-
-    fn is_textual_or_password(&self) -> bool {
-        self.is_textual() || *self == InputType::Password
-    }
-
-    /// <https://html.spec.whatwg.org/multipage/#has-a-periodic-domain>
-    fn has_periodic_domain(&self) -> bool {
-        *self == InputType::Time
-    }
-
-    fn as_str(&self) -> &str {
-        match *self {
-            InputType::Button => "button",
-            InputType::Checkbox => "checkbox",
-            InputType::Color => "color",
-            InputType::Date => "date",
-            InputType::DatetimeLocal => "datetime-local",
-            InputType::Email => "email",
-            InputType::File => "file",
-            InputType::Hidden => "hidden",
-            InputType::Image => "image",
-            InputType::Month => "month",
-            InputType::Number => "number",
-            InputType::Password => "password",
-            InputType::Radio => "radio",
-            InputType::Range => "range",
-            InputType::Reset => "reset",
-            InputType::Search => "search",
-            InputType::Submit => "submit",
-            InputType::Tel => "tel",
-            InputType::Text => "text",
-            InputType::Time => "time",
-            InputType::Url => "url",
-            InputType::Week => "week",
-        }
-    }
-}
-
-impl TryFrom<InputType> for InputMethodType {
-    type Error = &'static str;
-
-    fn try_from(input_type: InputType) -> Result<Self, Self::Error> {
-        match input_type {
-            InputType::Color => Ok(InputMethodType::Color),
-            InputType::Date => Ok(InputMethodType::Date),
-            InputType::DatetimeLocal => Ok(InputMethodType::DatetimeLocal),
-            InputType::Email => Ok(InputMethodType::Email),
-            InputType::Month => Ok(InputMethodType::Month),
-            InputType::Number => Ok(InputMethodType::Number),
-            InputType::Password => Ok(InputMethodType::Password),
-            InputType::Search => Ok(InputMethodType::Search),
-            InputType::Tel => Ok(InputMethodType::Tel),
-            InputType::Text => Ok(InputMethodType::Text),
-            InputType::Time => Ok(InputMethodType::Time),
-            InputType::Url => Ok(InputMethodType::Url),
-            InputType::Week => Ok(InputMethodType::Week),
-            _ => Err("Input does not support IME."),
-        }
-    }
-}
-
-impl From<&Atom> for InputType {
-    fn from(value: &Atom) -> InputType {
-        match value.to_ascii_lowercase() {
-            atom!("button") => InputType::Button,
-            atom!("checkbox") => InputType::Checkbox,
-            atom!("color") => InputType::Color,
-            atom!("date") => InputType::Date,
-            atom!("datetime-local") => InputType::DatetimeLocal,
-            atom!("email") => InputType::Email,
-            atom!("file") => InputType::File,
-            atom!("hidden") => InputType::Hidden,
-            atom!("image") => InputType::Image,
-            atom!("month") => InputType::Month,
-            atom!("number") => InputType::Number,
-            atom!("password") => InputType::Password,
-            atom!("radio") => InputType::Radio,
-            atom!("range") => InputType::Range,
-            atom!("reset") => InputType::Reset,
-            atom!("search") => InputType::Search,
-            atom!("submit") => InputType::Submit,
-            atom!("tel") => InputType::Tel,
-            atom!("text") => InputType::Text,
-            atom!("time") => InputType::Time,
-            atom!("url") => InputType::Url,
-            atom!("week") => InputType::Week,
-            _ => Self::default(),
-        }
-    }
-}
-
 #[derive(Debug, PartialEq)]
-enum ValueMode {
+pub(crate) enum ValueMode {
     /// <https://html.spec.whatwg.org/multipage/#dom-input-value-value>
     Value,
 
@@ -660,11 +227,11 @@ pub(crate) struct HTMLInputElement {
 
 #[derive(JSTraceable)]
 pub(crate) struct InputActivationState {
-    indeterminate: bool,
-    checked: bool,
-    checked_radio: Option<DomRoot<HTMLInputElement>>,
+    pub(crate) indeterminate: bool,
+    pub(crate) checked: bool,
+    pub(crate) checked_radio: Option<DomRoot<HTMLInputElement>>,
     // In case the type changed
-    old_type: InputType,
+    pub(crate) old_type: InputType,
     // was_mutable is implied: pre-activation would return None if it wasn't
 }
 
@@ -765,7 +332,7 @@ impl HTMLInputElement {
 
     // https://html.spec.whatwg.org/multipage/#dom-input-value
     /// <https://html.spec.whatwg.org/multipage/#concept-input-apply>
-    fn value_mode(&self) -> ValueMode {
+    pub(crate) fn value_mode(&self) -> ValueMode {
         match self.input_type() {
             InputType::Submit |
             InputType::Reset |
@@ -873,7 +440,7 @@ impl HTMLInputElement {
     }
 
     /// <https://html.spec.whatwg.org/multipage#concept-input-step>
-    fn allowed_value_step(&self) -> Option<f64> {
+    pub(crate) fn allowed_value_step(&self) -> Option<f64> {
         // Step 1. If the attribute does not apply, then there is no allowed value step.
         // NOTE: The attribute applies iff there is a default step
         let default_step = self.default_step()?;
@@ -906,7 +473,7 @@ impl HTMLInputElement {
     }
 
     /// <https://html.spec.whatwg.org/multipage#concept-input-min>
-    fn minimum(&self) -> Option<f64> {
+    pub(crate) fn minimum(&self) -> Option<f64> {
         self.upcast::<Element>()
             .get_attribute(&local_name!("min"))
             .and_then(|attribute| self.convert_string_to_number(&attribute.value()))
@@ -914,7 +481,7 @@ impl HTMLInputElement {
     }
 
     /// <https://html.spec.whatwg.org/multipage#concept-input-max>
-    fn maximum(&self) -> Option<f64> {
+    pub(crate) fn maximum(&self) -> Option<f64> {
         self.upcast::<Element>()
             .get_attribute(&local_name!("max"))
             .and_then(|attribute| self.convert_string_to_number(&attribute.value()))
@@ -923,7 +490,7 @@ impl HTMLInputElement {
 
     /// when allowed_value_step and minimum both exist, this is the smallest
     /// value >= minimum that lies on an integer step
-    fn stepped_minimum(&self) -> Option<f64> {
+    pub(crate) fn stepped_minimum(&self) -> Option<f64> {
         match (self.minimum(), self.allowed_value_step()) {
             (Some(min), Some(allowed_step)) => {
                 let step_base = self.step_base();
@@ -938,7 +505,7 @@ impl HTMLInputElement {
 
     /// when allowed_value_step and maximum both exist, this is the smallest
     /// value <= maximum that lies on an integer step
-    fn stepped_maximum(&self) -> Option<f64> {
+    pub(crate) fn stepped_maximum(&self) -> Option<f64> {
         match (self.maximum(), self.allowed_value_step()) {
             (Some(max), Some(allowed_step)) => {
                 let step_base = self.step_base();
@@ -968,7 +535,7 @@ impl HTMLInputElement {
     }
 
     /// <https://html.spec.whatwg.org/multipage#concept-input-value-default-range>
-    fn default_range_value(&self) -> f64 {
+    pub(crate) fn default_range_value(&self) -> f64 {
         let min = self.minimum().unwrap_or(0.0);
         let max = self.maximum().unwrap_or(100.0);
         if max < min {
@@ -1007,7 +574,7 @@ impl HTMLInputElement {
     }
 
     /// <https://html.spec.whatwg.org/multipage#concept-input-min-zero>
-    fn step_base(&self) -> f64 {
+    pub(crate) fn step_base(&self) -> f64 {
         // Step 1. If the element has a min content attribute, and the result of applying
         // the algorithm to convert a string to a number to the value of the min content attribute
         // is not an error, then return that result.
@@ -1189,43 +756,9 @@ impl HTMLInputElement {
 
     /// <https://html.spec.whatwg.org/multipage/#suffering-from-being-missing>
     fn suffers_from_being_missing(&self, value: &DOMString) -> bool {
-        match self.input_type() {
-            // https://html.spec.whatwg.org/multipage/#checkbox-state-(type%3Dcheckbox)%3Asuffering-from-being-missing
-            InputType::Checkbox => self.Required() && !self.Checked(),
-            // https://html.spec.whatwg.org/multipage/#radio-button-state-(type%3Dradio)%3Asuffering-from-being-missing
-            InputType::Radio => {
-                if self.radio_group_name().is_none() {
-                    return false;
-                }
-                let mut is_required = self.Required();
-                let mut is_checked = self.Checked();
-                let root = self
-                    .upcast::<Node>()
-                    .GetRootNode(&GetRootNodeOptions::empty());
-                let form = self.form_owner();
-                for other in radio_group_iter(
-                    self,
-                    self.radio_group_name().as_ref(),
-                    form.as_deref(),
-                    &root,
-                ) {
-                    is_required = is_required || other.Required();
-                    is_checked = is_checked || other.Checked();
-                }
-                is_required && !is_checked
-            },
-            // https://html.spec.whatwg.org/multipage/#file-upload-state-(type%3Dfile)%3Asuffering-from-being-missing
-            InputType::File => {
-                self.Required() && self.filelist.get().is_none_or(|files| files.Length() == 0)
-            },
-            // https://html.spec.whatwg.org/multipage/#the-required-attribute%3Asuffering-from-being-missing
-            _ => {
-                self.Required() &&
-                    self.value_mode() == ValueMode::Value &&
-                    self.is_mutable() &&
-                    value.is_empty()
-            },
-        }
+        self.input_type()
+            .as_specific()
+            .suffers_from_being_missing(self, value)
     }
 
     /// <https://html.spec.whatwg.org/multipage/#suffering-from-a-type-mismatch>
@@ -1234,21 +767,9 @@ impl HTMLInputElement {
             return false;
         }
 
-        match self.input_type() {
-            // https://html.spec.whatwg.org/multipage/#url-state-(type%3Durl)%3Asuffering-from-a-type-mismatch
-            InputType::Url => Url::parse(&value.str()).is_err(),
-            // https://html.spec.whatwg.org/multipage/#e-mail-state-(type%3Demail)%3Asuffering-from-a-type-mismatch
-            // https://html.spec.whatwg.org/multipage/#e-mail-state-(type%3Demail)%3Asuffering-from-a-type-mismatch-2
-            InputType::Email => {
-                if self.Multiple() {
-                    !split_commas(&value.str()).all(|string| string.is_valid_email_address_string())
-                } else {
-                    !value.str().is_valid_email_address_string()
-                }
-            },
-            // Other input types don't suffer from type mismatch
-            _ => false,
-        }
+        self.input_type()
+            .as_specific()
+            .suffers_from_type_mismatch(self, value)
     }
 
     /// <https://html.spec.whatwg.org/multipage/#suffering-from-a-pattern-mismatch>
@@ -1284,33 +805,9 @@ impl HTMLInputElement {
             return false;
         }
 
-        match self.input_type() {
-            // https://html.spec.whatwg.org/multipage/#e-mail-state-(type%3Demail)%3Asuffering-from-bad-input
-            // https://html.spec.whatwg.org/multipage/#e-mail-state-(type%3Demail)%3Asuffering-from-bad-input-2
-            InputType::Email => {
-                // TODO: Check for input that cannot be converted to punycode.
-                // Currently we don't support conversion of email values to punycode
-                // so always return false.
-                false
-            },
-            // https://html.spec.whatwg.org/multipage/#date-state-(type%3Ddate)%3Asuffering-from-bad-input
-            InputType::Date => !value.str().is_valid_date_string(),
-            // https://html.spec.whatwg.org/multipage/#month-state-(type%3Dmonth)%3Asuffering-from-bad-input
-            InputType::Month => !value.str().is_valid_month_string(),
-            // https://html.spec.whatwg.org/multipage/#week-state-(type%3Dweek)%3Asuffering-from-bad-input
-            InputType::Week => !value.str().is_valid_week_string(),
-            // https://html.spec.whatwg.org/multipage/#time-state-(type%3Dtime)%3Asuffering-from-bad-input
-            InputType::Time => !value.str().is_valid_time_string(),
-            // https://html.spec.whatwg.org/multipage/#local-date-and-time-state-(type%3Ddatetime-local)%3Asuffering-from-bad-input
-            InputType::DatetimeLocal => !value.str().is_valid_local_date_time_string(),
-            // https://html.spec.whatwg.org/multipage/#number-state-(type%3Dnumber)%3Asuffering-from-bad-input
-            // https://html.spec.whatwg.org/multipage/#range-state-(type%3Drange)%3Asuffering-from-bad-input
-            InputType::Number | InputType::Range => !value.is_valid_floating_point_number_string(),
-            // https://html.spec.whatwg.org/multipage/#color-state-(type%3Dcolor)%3Asuffering-from-bad-input
-            InputType::Color => !value.str().is_valid_simple_color_string(),
-            // Other input types don't suffer from bad input
-            _ => false,
-        }
+        self.input_type()
+            .as_specific()
+            .suffers_from_bad_input(value)
     }
 
     // https://html.spec.whatwg.org/multipage/#suffering-from-being-too-long
@@ -1479,27 +976,8 @@ impl HTMLInputElement {
             InputType::Radio |
             InputType::Image |
             InputType::Hidden |
-            InputType::Range => "".into(),
-            InputType::File => {
-                let Some(filelist) = self.filelist.get() else {
-                    if self.Multiple() {
-                        return DEFAULT_FILE_INPUT_MULTIPLE_VALUE.into();
-                    }
-                    return DEFAULT_FILE_INPUT_VALUE.into();
-                };
-                let length = filelist.Length();
-                if length > 1 {
-                    return format!("{length} files").into();
-                }
-
-                let Some(first_item) = filelist.Item(0) else {
-                    if self.Multiple() {
-                        return DEFAULT_FILE_INPUT_MULTIPLE_VALUE.into();
-                    }
-                    return DEFAULT_FILE_INPUT_VALUE.into();
-                };
-                first_item.name().to_string().into()
-            },
+            InputType::Range |
+            InputType::File => input_type.as_specific().value_for_shadow_dom(self),
             _ => {
                 if let Some(attribute_value) = self
                     .upcast::<Element>()
@@ -1508,13 +986,21 @@ impl HTMLInputElement {
                 {
                     return attribute_value;
                 }
-                match input_type {
-                    InputType::Submit => DEFAULT_SUBMIT_VALUE.into(),
-                    InputType::Reset => DEFAULT_RESET_VALUE.into(),
-                    _ => "".into(),
-                }
+                input_type.as_specific().value_for_shadow_dom(self)
             },
         }
+    }
+
+    pub(crate) fn textinput_mut(&self) -> RefMut<'_, TextInput<EmbedderClipboardProvider>> {
+        self.textinput.borrow_mut()
+    }
+
+    pub(crate) fn filelist(&self) -> Option<DomRoot<FileList>> {
+        self.filelist.get()
+    }
+
+    pub(crate) fn placeholder(&self) -> Ref<'_, DOMString> {
+        self.placeholder.borrow()
     }
 }
 
@@ -1806,7 +1292,9 @@ impl HTMLInputElementMethods<crate::DomTypeHolder> for HTMLInputElement {
     // https://html.spec.whatwg.org/multipage/#dom-input-valueasdate
     #[expect(unsafe_code)]
     fn GetValueAsDate(&self, cx: SafeJSContext) -> Option<NonNull<JSObject>> {
-        self.convert_string_to_naive_datetime(self.Value())
+        self.input_type()
+            .as_specific()
+            .convert_string_to_naive_datetime(self.Value())
             .map(|date_time| unsafe {
                 let time = ClippedTime {
                     t: (date_time - OffsetDateTime::UNIX_EPOCH).whole_milliseconds() as f64,
@@ -1854,7 +1342,12 @@ impl HTMLInputElementMethods<crate::DomTypeHolder> for HTMLInputElement {
         let Ok(date_time) = OffsetDateTime::from_unix_timestamp_nanos((msecs * 1e6) as i128) else {
             return self.SetValue(DOMString::from(""), can_gc);
         };
-        self.SetValue(self.convert_datetime_to_dom_string(date_time), can_gc)
+        self.SetValue(
+            self.input_type()
+                .as_specific()
+                .convert_datetime_to_dom_string(date_time),
+            can_gc,
+        )
     }
 
     /// <https://html.spec.whatwg.org/multipage/#dom-input-valueasnumber>
@@ -2089,9 +1582,9 @@ impl HTMLInputElementMethods<crate::DomTypeHolder> for HTMLInputElement {
     /// Select the files based on filepaths passed in, enabled by
     /// `dom_testing_html_input_element_select_files_enabled`, used for test purpose.
     fn SelectFiles(&self, paths: Vec<DOMString>) {
-        if self.input_type() == InputType::File {
-            self.select_files(Some(paths));
-        }
+        self.input_type()
+            .as_specific()
+            .select_files(self, Some(paths));
     }
 
     /// <https://html.spec.whatwg.org/multipage/#dom-input-stepup>
@@ -2135,80 +1628,7 @@ impl HTMLInputElementMethods<crate::DomTypeHolder> for HTMLInputElement {
     }
 }
 
-fn radio_group_iter<'a>(
-    elem: &'a HTMLInputElement,
-    group: Option<&'a Atom>,
-    form: Option<&'a HTMLFormElement>,
-    root: &'a Node,
-) -> impl Iterator<Item = DomRoot<HTMLInputElement>> + 'a {
-    root.traverse_preorder(ShadowIncluding::No)
-        .filter_map(DomRoot::downcast::<HTMLInputElement>)
-        .filter(move |r| &**r == elem || in_same_group(r, form, group, Some(root)))
-}
-
-fn broadcast_radio_checked(broadcaster: &HTMLInputElement, group: Option<&Atom>, can_gc: CanGc) {
-    let root = broadcaster
-        .upcast::<Node>()
-        .GetRootNode(&GetRootNodeOptions::empty());
-    let form = broadcaster.form_owner();
-    for r in radio_group_iter(broadcaster, group, form.as_deref(), &root) {
-        if broadcaster != &*r && r.Checked() {
-            r.SetChecked(false, can_gc);
-        }
-    }
-}
-
-fn perform_radio_group_validation(elem: &HTMLInputElement, group: Option<&Atom>, can_gc: CanGc) {
-    let root = elem
-        .upcast::<Node>()
-        .GetRootNode(&GetRootNodeOptions::empty());
-    let form = elem.form_owner();
-    for r in radio_group_iter(elem, group, form.as_deref(), &root) {
-        r.validity_state(can_gc)
-            .perform_validation_and_update(ValidationFlags::all(), can_gc);
-    }
-}
-
-/// <https://html.spec.whatwg.org/multipage/#radio-button-group>
-fn in_same_group(
-    other: &HTMLInputElement,
-    owner: Option<&HTMLFormElement>,
-    group: Option<&Atom>,
-    tree_root: Option<&Node>,
-) -> bool {
-    if group.is_none() {
-        // Radio input elements with a missing or empty name are alone in their own group.
-        return false;
-    }
-
-    if other.input_type() != InputType::Radio ||
-        other.form_owner().as_deref() != owner ||
-        other.radio_group_name().as_ref() != group
-    {
-        return false;
-    }
-
-    match tree_root {
-        Some(tree_root) => {
-            let other_root = other
-                .upcast::<Node>()
-                .GetRootNode(&GetRootNodeOptions::empty());
-            tree_root == &*other_root
-        },
-        None => {
-            // Skip check if the tree root isn't provided.
-            true
-        },
-    }
-}
-
 impl HTMLInputElement {
-    fn radio_group_updated(&self, group: Option<&Atom>, can_gc: CanGc) {
-        if self.Checked() {
-            broadcast_radio_checked(self, group, can_gc);
-        }
-    }
-
     /// <https://html.spec.whatwg.org/multipage/#constructing-the-form-data-set>
     /// Steps range from 5.1 to 5.10 (specific to HTMLInputElement)
     pub(crate) fn form_datums(
@@ -2304,7 +1724,7 @@ impl HTMLInputElement {
     }
 
     /// <https://html.spec.whatwg.org/multipage/#radio-button-group>
-    fn radio_group_name(&self) -> Option<Atom> {
+    pub(crate) fn radio_group_name(&self) -> Option<Atom> {
         self.upcast::<Element>()
             .get_name()
             .filter(|name| !name.is_empty())
@@ -2418,280 +1838,19 @@ impl HTMLInputElement {
             expected_file_count: test_paths.len(),
         });
 
-        self.select_files(Some(test_paths));
-    }
-
-    /// Select files by invoking UI or by passed in argument.
-    ///
-    /// <https://html.spec.whatwg.org/multipage/#file-upload-state-(type=file)>
-    pub(crate) fn select_files(&self, test_paths: Option<Vec<DOMString>>) {
-        let current_paths = match &test_paths {
-            Some(test_paths) => test_paths
-                .iter()
-                .filter_map(|path_str| PathBuf::from_str(&path_str.str()).ok())
-                .collect(),
-            // TODO: This should get the pathnames of the current files, but we currently don't have
-            // that information in Script. It should be passed through here.
-            None => Default::default(),
-        };
-
-        let accept_current_paths_for_testing = test_paths.is_some();
-        self.owner_document()
-            .embedder_controls()
-            .show_embedder_control(
-                ControlElement::FileInput(DomRoot::from_ref(self)),
-                EmbedderControlRequest::FilePicker(FilePickerRequest {
-                    origin: self.owner_window().origin().immutable().clone(),
-                    current_paths,
-                    filter_patterns: filter_from_accept(&self.Accept()),
-                    allow_select_multiple: self.Multiple(),
-                    accept_current_paths_for_testing,
-                }),
-                None,
-            );
+        self.input_type()
+            .as_specific()
+            .select_files(self, Some(test_paths));
     }
 
     /// <https://html.spec.whatwg.org/multipage/#value-sanitization-algorithm>
     fn sanitize_value(&self, value: &mut DOMString) {
-        match self.input_type() {
-            InputType::Text | InputType::Search | InputType::Tel | InputType::Password => {
-                value.strip_newlines();
-            },
-            InputType::Url => {
-                value.strip_newlines();
-                value.strip_leading_and_trailing_ascii_whitespace();
-            },
-            InputType::Date => {
-                if !value.str().is_valid_date_string() {
-                    value.clear();
-                }
-            },
-            InputType::Month => {
-                if !value.str().is_valid_month_string() {
-                    value.clear();
-                }
-            },
-            InputType::Week => {
-                if !value.str().is_valid_week_string() {
-                    value.clear();
-                }
-            },
-            InputType::Color => {
-                // > The value sanitization algorithm is as follows:
-                // > Run update a color well control color for the element.
-                self.update_a_color_well_control_color(value);
-            },
-            InputType::Time => {
-                if !value.str().is_valid_time_string() {
-                    value.clear();
-                }
-            },
-            InputType::DatetimeLocal => {
-                let time = value
-                    .str()
-                    .parse_local_date_time_string()
-                    .map(|date_time| date_time.to_local_date_time_string());
-                match time {
-                    Some(normalized_string) => *value = normalized_string.into(),
-                    None => value.clear(),
-                }
-            },
-            InputType::Number => {
-                if !value.is_valid_floating_point_number_string() {
-                    value.clear();
-                }
-                // Spec says that user agent "may" round the value
-                // when it's suffering a step mismatch, but WPT tests
-                // want it unrounded, and this matches other browser
-                // behavior (typing an unrounded number into an
-                // integer field box and pressing enter generally keeps
-                // the number intact but makes the input box :invalid)
-            },
-            // https://html.spec.whatwg.org/multipage/#range-state-(type=range):value-sanitization-algorithm
-            InputType::Range => {
-                if !value.is_valid_floating_point_number_string() {
-                    *value = DOMString::from(self.default_range_value().to_string());
-                }
-                if let Ok(fval) = &value.parse::<f64>() {
-                    let mut fval = *fval;
-                    // comparing max first, because if they contradict
-                    // the spec wants min to be the one that applies
-                    if let Some(max) = self.maximum() {
-                        if fval > max {
-                            fval = max;
-                        }
-                    }
-                    if let Some(min) = self.minimum() {
-                        if fval < min {
-                            fval = min;
-                        }
-                    }
-                    // https://html.spec.whatwg.org/multipage/#range-state-(type=range):suffering-from-a-step-mismatch
-                    // Spec does not describe this in a way that lends itself to
-                    // reproducible handling of floating-point rounding;
-                    // Servo may fail a WPT test because .1 * 6 == 6.000000000000001
-                    if let Some(allowed_value_step) = self.allowed_value_step() {
-                        let step_base = self.step_base();
-                        let steps_from_base = (fval - step_base) / allowed_value_step;
-                        if steps_from_base.fract() != 0.0 {
-                            // not an integer number of steps, there's a mismatch
-                            // round the number of steps...
-                            let int_steps = round_halves_positive(steps_from_base);
-                            // and snap the value to that rounded value...
-                            fval = int_steps * allowed_value_step + step_base;
-
-                            // but if after snapping we're now outside min..max
-                            // we have to adjust! (adjusting to min last because
-                            // that "wins" over max in the spec)
-                            if let Some(stepped_maximum) = self.stepped_maximum() {
-                                if fval > stepped_maximum {
-                                    fval = stepped_maximum;
-                                }
-                            }
-                            if let Some(stepped_minimum) = self.stepped_minimum() {
-                                if fval < stepped_minimum {
-                                    fval = stepped_minimum;
-                                }
-                            }
-                        }
-                    }
-                    *value = DOMString::from(fval.to_string());
-                };
-            },
-            InputType::Email => {
-                if !self.Multiple() {
-                    value.strip_newlines();
-                    value.strip_leading_and_trailing_ascii_whitespace();
-                } else {
-                    let sanitized = split_commas(&value.str())
-                        .map(|token| {
-                            let mut token = DOMString::from(token.to_string());
-                            token.strip_newlines();
-                            token.strip_leading_and_trailing_ascii_whitespace();
-                            token
-                        })
-                        .join(",");
-                    value.clear();
-                    value.push_str(sanitized.as_str());
-                }
-            },
-            // The following inputs don't have a value sanitization algorithm.
-            // See https://html.spec.whatwg.org/multipage/#value-sanitization-algorithm
-            InputType::Button |
-            InputType::Checkbox |
-            InputType::File |
-            InputType::Hidden |
-            InputType::Image |
-            InputType::Radio |
-            InputType::Reset |
-            InputType::Submit => (),
-        }
+        self.input_type().as_specific().sanitize_value(self, value);
     }
 
     #[cfg_attr(crown, expect(crown::unrooted_must_root))]
     fn selection(&self) -> TextControlSelection<'_, Self> {
         TextControlSelection::new(self, &self.textinput)
-    }
-
-    /// <https://html.spec.whatwg.org/multipage/#update-a-color-well-control-color>
-    fn update_a_color_well_control_color(&self, element_value: &mut DOMString) {
-        // Step 1. Assert: element is an input element whose type attribute is in the Color state.
-        debug_assert_eq!(self.input_type(), InputType::Color);
-
-        // Step 2. Let value be the result of running these steps:
-        // Step 2.1 If element's dirty value flag is true, then return the result of getting an attribute
-        // by namespace and local name given null, "value", and element.
-        // FIXME: If we do this then things break
-        // Step 2.2. Return element's value.
-        let value = element_value.to_owned();
-
-        // Step 3. Let color be the result of parsing value.
-        // Step 4. If color is failure, then set color to opaque black.
-        let color = parse_color_value(
-            &value.str(),
-            self.owner_document().url().as_url().to_owned(),
-        );
-
-        // Step 5. Set element's value to the result of serializing a color well control color
-        // given element and color.
-        self.serialize_a_color_well_control_color(color, element_value);
-    }
-
-    /// <https://html.spec.whatwg.org/multipage/#attr-input-colorspace>
-    fn colorspace(&self) -> ColorSpace {
-        let colorspace = self
-            .upcast::<Element>()
-            .get_string_attribute(&local_name!("colorspace"));
-        if colorspace.str() == "display-p3" {
-            ColorSpace::DisplayP3
-        } else {
-            ColorSpace::Srgb
-        }
-    }
-
-    /// <https://html.spec.whatwg.org/multipage/#serialize-a-color-well-control-color>
-    fn serialize_a_color_well_control_color(
-        &self,
-        mut color: AbsoluteColor,
-        destination: &mut DOMString,
-    ) {
-        // Step 1. Assert: element is an input element whose type attribute is in the Color state.
-        debug_assert_eq!(self.input_type(), InputType::Color);
-
-        // Step 2. Let htmlCompatible be false.
-        let mut html_compatible = false;
-
-        // Step 3. If element's alpha attribute is not specified, then set color's alpha component to be fully opaque.
-        let has_alpha = self.Alpha();
-        if !has_alpha {
-            color.alpha = 1.0;
-        }
-
-        // Step 4. If element's colorspace attribute is in the Limited sRGB state:
-        let colorspace_attribute = self.colorspace();
-        if colorspace_attribute == ColorSpace::Srgb {
-            // Step 4.1 Set color to color converted to the 'srgb' color space.
-            color = color.to_color_space(ColorSpace::Srgb);
-
-            // Step 4.2 Round each of color's components so they are in the range 0 to 255, inclusive.
-            // Components are to be rounded towards +∞.
-            color.components.0 = color.components.0.clamp(0.0, 1.0);
-            color.components.1 = color.components.1.clamp(0.0, 1.0);
-            color.components.2 = color.components.2.clamp(0.0, 1.0);
-
-            // Step 4.3 If element's alpha attribute is not specified, then set htmlCompatible to true.
-            if !has_alpha {
-                html_compatible = true;
-            }
-            // Step 4.4 Otherwise, set color to color converted using the 'color()' function.
-            // NOTE: Unsetting the legacy bit forces `color()`
-            else {
-                color.flags &= !ColorFlags::IS_LEGACY_SRGB;
-            }
-        }
-        // Step 5. Otherwise:
-        else {
-            // Step 5.1 Assert: element's colorspace attribute is in the Display P3 state.
-            debug_assert_eq!(colorspace_attribute, ColorSpace::DisplayP3);
-
-            // Step 5.2 Set color to color converted to the 'display-p3' color space.
-            color = color.to_color_space(ColorSpace::DisplayP3);
-        }
-
-        // Step 6. Return the result of serializing color. If htmlCompatible is true,
-        // then do so with HTML-compatible serialization requested.
-        *destination = if html_compatible {
-            color = color.to_color_space(ColorSpace::Srgb);
-            format!(
-                "#{:0>2x}{:0>2x}{:0>2x}",
-                (color.components.0 * 255.0).round() as usize,
-                (color.components.1 * 255.0).round() as usize,
-                (color.components.2 * 255.0).round() as usize
-            )
-        } else {
-            color.to_css_string()
-        }
-        .into();
     }
 
     /// <https://html.spec.whatwg.org/multipage/#implicit-submission>
@@ -2760,127 +1919,16 @@ impl HTMLInputElement {
 
     /// <https://html.spec.whatwg.org/multipage/#concept-input-value-string-number>
     fn convert_string_to_number(&self, value: &str) -> Option<f64> {
-        match self.input_type() {
-            // > The algorithm to convert a string to a number, given a string input, is as
-            // > follows: If parsing a date from input results in an error, then return an
-            // > error; otherwise, return the number of milliseconds elapsed from midnight
-            // > UTC on the morning of 1970-01-01 (the time represented by the value
-            // > "1970-01-01T00:00:00.0Z") to midnight UTC on the morning of the parsed
-            // > date, ignoring leap seconds.
-            InputType::Date => value.parse_date_string().map(|date_time| {
-                (date_time - OffsetDateTime::UNIX_EPOCH).whole_milliseconds() as f64
-            }),
-            // > The algorithm to convert a string to a number, given a string input, is as
-            // > follows: If parsing a month from input results in an error, then return an
-            // > error; otherwise, return the number of months between January 1970 and the
-            // > parsed month.
-            //
-            // This one returns number of months, not milliseconds (specification requires
-            // this, presumably because number of milliseconds is not consistent across
-            // months) the - 1.0 is because january is 1, not 0
-            InputType::Month => value.parse_month_string().map(|date_time| {
-                ((date_time.year() - 1970) * 12) as f64 + (date_time.month() as u8 - 1) as f64
-            }),
-            // > The algorithm to convert a string to a number, given a string input, is as
-            // > follows: If parsing a week string from input results in an error, then
-            // > return an error; otherwise, return the number of milliseconds elapsed from
-            // > midnight UTC on the morning of 1970-01-01 (the time represented by the
-            // > value "1970-01-01T00:00:00.0Z") to midnight UTC on the morning of the
-            // > Monday of the parsed week, ignoring leap seconds.
-            InputType::Week => value.parse_week_string().map(|date_time| {
-                (date_time - OffsetDateTime::UNIX_EPOCH).whole_milliseconds() as f64
-            }),
-            // > The algorithm to convert a string to a number, given a string input, is as
-            // > follows: If parsing a time from input results in an error, then return an
-            // > error; otherwise, return the number of milliseconds elapsed from midnight to
-            // > the parsed time on a day with no time changes.
-            InputType::Time => value
-                .parse_time_string()
-                .map(|date_time| (date_time.time() - Time::MIDNIGHT).whole_milliseconds() as f64),
-            // > The algorithm to convert a string to a number, given a string input, is as
-            // > follows: If parsing a date and time from input results in an error, then
-            // > return an error; otherwise, return the number of milliseconds elapsed from
-            // > midnight on the morning of 1970-01-01 (the time represented by the value
-            // > "1970-01-01T00:00:00.0") to the parsed local date and time, ignoring leap
-            // > seconds.
-            InputType::DatetimeLocal => value.parse_local_date_time_string().map(|date_time| {
-                (date_time - OffsetDateTime::UNIX_EPOCH).whole_milliseconds() as f64
-            }),
-            InputType::Number | InputType::Range => parse_floating_point_number(value),
-            // min/max/valueAsNumber/stepDown/stepUp do not apply to
-            // the remaining types
-            _ => None,
-        }
+        self.input_type()
+            .as_specific()
+            .convert_string_to_number(value)
     }
 
     /// <https://html.spec.whatwg.org/multipage/#concept-input-value-string-number>
     fn convert_number_to_string(&self, value: f64) -> Option<DOMString> {
-        match self.input_type() {
-            InputType::Date | InputType::Week | InputType::Time | InputType::DatetimeLocal => {
-                OffsetDateTime::from_unix_timestamp_nanos((value * 1e6) as i128)
-                    .ok()
-                    .map(|value| self.convert_datetime_to_dom_string(value))
-            },
-            InputType::Month => {
-                // > The algorithm to convert a number to a string, given a number input,
-                // > is as follows: Return a valid month string that represents the month
-                // > that has input months between it and January 1970.
-                let date = OffsetDateTime::UNIX_EPOCH;
-                let years = (value / 12.) as i32;
-                let year = date.year() + years;
-
-                let months = value as i32 - (years * 12);
-                let months = match months.cmp(&0) {
-                    Ordering::Less => (12 - months) as u8,
-                    Ordering::Equal | Ordering::Greater => months as u8,
-                } + 1;
-
-                let date = date
-                    .replace_year(year)
-                    .ok()?
-                    .replace_month(Month::try_from(months).ok()?)
-                    .ok()?;
-                Some(self.convert_datetime_to_dom_string(date))
-            },
-            InputType::Number | InputType::Range => {
-                let mut value = DOMString::from(value.to_string());
-                value.set_best_representation_of_the_floating_point_number();
-                Some(value)
-            },
-            _ => unreachable!("Should not have called convert_number_to_string for non-Date types"),
-        }
-    }
-
-    // <https://html.spec.whatwg.org/multipage/#concept-input-value-string-date>
-    // This does the safe Rust part of conversion; the unsafe JS Date part
-    // is in GetValueAsDate
-    fn convert_string_to_naive_datetime(&self, value: DOMString) -> Option<OffsetDateTime> {
-        match self.input_type() {
-            InputType::Date => value.str().parse_date_string(),
-            InputType::Time => value.str().parse_time_string(),
-            InputType::Week => value.str().parse_week_string(),
-            InputType::Month => value.str().parse_month_string(),
-            InputType::DatetimeLocal => value.str().parse_local_date_time_string(),
-            // does not apply to other types
-            _ => None,
-        }
-    }
-
-    /// <https://html.spec.whatwg.org/multipage/#concept-input-value-date-string>
-    /// This does the safe Rust part of conversion; the unsafe JS Date part
-    /// is in SetValueAsDate
-    fn convert_datetime_to_dom_string(&self, value: OffsetDateTime) -> DOMString {
-        match self.input_type() {
-            InputType::Date => value.to_date_string(),
-            InputType::Month => value.to_month_string(),
-            InputType::Week => value.to_week_string(),
-            InputType::Time => value.to_time_string(),
-            InputType::DatetimeLocal => value.to_local_date_time_string(),
-            _ => {
-                unreachable!("Should not have called convert_datetime_to_string for non-Date types")
-            },
-        }
-        .into()
+        self.input_type()
+            .as_specific()
+            .convert_number_to_string(value)
     }
 
     fn update_related_validity_states(&self, can_gc: CanGc) {
@@ -2902,7 +1950,7 @@ impl HTMLInputElement {
     }
 
     /// <https://html.spec.whatwg.org/multipage/#show-the-picker,-if-applicable>
-    fn show_the_picker_if_applicable(&self) {
+    pub(crate) fn show_the_picker_if_applicable(&self) {
         // FIXME: Implement most of this algorithm
 
         // Step 2. If element is not mutable, then return.
@@ -2912,25 +1960,9 @@ impl HTMLInputElement {
 
         // Step 6. Otherwise, the user agent should show the relevant user interface for selecting a value for element,
         // in the way it normally would when the user interacts with the control.
-        if self.input_type() == InputType::Color {
-            let document = self.owner_document();
-            let current_value = self.Value();
-            let current_color = parse_color_value(
-                &current_value.str(),
-                self.owner_document().url().as_url().to_owned(),
-            )
-            .to_color_space(ColorSpace::Srgb);
-            let current_color = RgbColor {
-                red: (current_color.components.0 * 255.0).round() as u8,
-                green: (current_color.components.1 * 255.0).round() as u8,
-                blue: (current_color.components.2 * 255.0).round() as u8,
-            };
-            document.embedder_controls().show_embedder_control(
-                ControlElement::ColorInput(DomRoot::from_ref(self)),
-                EmbedderControlRequest::ColorPicker(current_color),
-                None,
-            );
-        }
+        self.input_type()
+            .as_specific()
+            .show_the_picker_if_applicable(self);
     }
 
     pub(crate) fn handle_color_picker_response(&self, response: Option<RgbColor>, can_gc: CanGc) {
@@ -3168,12 +2200,9 @@ impl VirtualMethods for HTMLInputElement {
                         }
 
                         // Step 5
-                        if new_type == InputType::Radio {
-                            self.radio_group_updated(
-                                self.radio_group_name().as_ref(),
-                                CanGc::from_cx(cx),
-                            );
-                        }
+                        self.input_type()
+                            .as_specific()
+                            .signal_type_change(self, CanGc::from_cx(cx));
 
                         // Step 6
                         let mut textinput = self.textinput.borrow_mut();
@@ -3188,13 +2217,9 @@ impl VirtualMethods for HTMLInputElement {
                         }
                     },
                     AttributeMutation::Removed => {
-                        if self.input_type() == InputType::Radio {
-                            broadcast_radio_checked(
-                                self,
-                                self.radio_group_name().as_ref(),
-                                CanGc::from_cx(cx),
-                            );
-                        }
+                        self.input_type()
+                            .as_specific()
+                            .signal_type_change(self, CanGc::from_cx(cx));
                         self.input_type.set(InputType::default());
                         let el = self.upcast::<Element>();
 
@@ -3217,12 +2242,6 @@ impl VirtualMethods for HTMLInputElement {
                 self.sanitize_value(&mut value);
                 self.textinput.borrow_mut().set_content(value);
                 self.update_placeholder_shown_state();
-            },
-            local_name!("name") if self.input_type() == InputType::Radio => {
-                self.radio_group_updated(
-                    mutation.new_value(attr).as_ref().map(|name| name.as_atom()),
-                    CanGc::from_cx(cx),
-                );
             },
             local_name!("maxlength") => match *attr.value() {
                 AttrValue::Int(_, value) => {
@@ -3277,16 +2296,14 @@ impl VirtualMethods for HTMLInputElement {
             local_name!("form") => {
                 self.form_attribute_mutated(mutation, CanGc::from_cx(cx));
             },
-            local_name!("alpha") | local_name!("colorspace") => {
-                // https://html.spec.whatwg.org/multipage/#attr-input-colorspace
-                // > Whenever the element's alpha or colorspace attributes are changed,
-                // the user agent must run update a color well control color given the element.
-                let mut textinput = self.textinput.borrow_mut();
-                let mut value = textinput.get_content();
-                self.update_a_color_well_control_color(&mut value);
-                textinput.set_content(value);
+            _ => {
+                self.input_type().as_specific().attribute_mutated(
+                    self,
+                    attr,
+                    mutation,
+                    CanGc::from_cx(cx),
+                );
             },
-            _ => {},
         }
 
         self.value_changed(CanGc::from_cx(cx));
@@ -3323,16 +2340,14 @@ impl VirtualMethods for HTMLInputElement {
         self.upcast::<Element>()
             .check_ancestors_disabled_state_for_form_control();
 
-        if self.input_type() == InputType::Radio {
-            self.radio_group_updated(self.radio_group_name().as_ref(), CanGc::from_cx(cx));
-        }
+        self.input_type()
+            .as_specific()
+            .bind_to_tree(self, cx, context);
 
         self.value_changed(CanGc::from_cx(cx));
     }
 
     fn unbind_from_tree(&self, context: &UnbindContext, can_gc: CanGc) {
-        let form_owner = self.form_owner();
-
         self.super_type().unwrap().unbind_from_tree(context, can_gc);
 
         let node = self.upcast::<Node>();
@@ -3346,27 +2361,12 @@ impl VirtualMethods for HTMLInputElement {
             el.check_disabled_attribute();
         }
 
-        if self.input_type() == InputType::Radio {
-            let root = context.parent.GetRootNode(&GetRootNodeOptions::empty());
-            for r in radio_group_iter(
-                self,
-                self.radio_group_name().as_ref(),
-                form_owner.as_deref(),
-                &root,
-            ) {
-                r.validity_state(can_gc)
-                    .perform_validation_and_update(ValidationFlags::all(), can_gc);
-            }
-        }
-
         self.validity_state(can_gc)
             .perform_validation_and_update(ValidationFlags::all(), can_gc);
 
-        if self.input_type() == InputType::Color {
-            self.owner_document()
-                .embedder_controls()
-                .hide_embedder_control(self.upcast());
-        }
+        self.input_type()
+            .as_specific()
+            .unbind_from_tree(self, context, can_gc);
     }
 
     // This represents behavior for which the UIEvents spec and the
@@ -3592,43 +2592,10 @@ impl Activatable for HTMLInputElement {
 
     /// <https://dom.spec.whatwg.org/#eventtarget-legacy-pre-activation-behavior>
     fn legacy_pre_activation_behavior(&self, can_gc: CanGc) -> Option<InputActivationState> {
-        let ty = self.input_type();
-        let activation_state = match ty {
-            InputType::Checkbox => {
-                let was_checked = self.Checked();
-                let was_indeterminate = self.Indeterminate();
-                self.SetIndeterminate(false);
-                self.SetChecked(!was_checked, can_gc);
-                Some(InputActivationState {
-                    checked: was_checked,
-                    indeterminate: was_indeterminate,
-                    checked_radio: None,
-                    old_type: InputType::Checkbox,
-                })
-            },
-            InputType::Radio => {
-                let root = self
-                    .upcast::<Node>()
-                    .GetRootNode(&GetRootNodeOptions::empty());
-                let form_owner = self.form_owner();
-                let checked_member = radio_group_iter(
-                    self,
-                    self.radio_group_name().as_ref(),
-                    form_owner.as_deref(),
-                    &root,
-                )
-                .find(|r| r.Checked());
-                let was_checked = self.Checked();
-                self.SetChecked(true, can_gc);
-                Some(InputActivationState {
-                    checked: was_checked,
-                    indeterminate: false,
-                    checked_radio: checked_member.as_deref().map(DomRoot::from_ref),
-                    old_type: InputType::Radio,
-                })
-            },
-            _ => None,
-        };
+        let activation_state = self
+            .input_type()
+            .as_specific()
+            .legacy_pre_activation_behavior(self, can_gc);
 
         if activation_state.is_some() {
             self.value_changed(can_gc);
@@ -3659,141 +2626,18 @@ impl Activatable for HTMLInputElement {
             },
         };
 
-        match ty {
-            // Step 2
-            InputType::Checkbox => {
-                self.SetIndeterminate(cache.indeterminate);
-                self.SetChecked(cache.checked, can_gc);
-            },
-            // Step 3
-            InputType::Radio => {
-                if let Some(ref o) = cache.checked_radio {
-                    let tree_root = self
-                        .upcast::<Node>()
-                        .GetRootNode(&GetRootNodeOptions::empty());
-                    // Avoiding iterating through the whole tree here, instead
-                    // we can check if the conditions for radio group siblings apply
-                    if in_same_group(
-                        o,
-                        self.form_owner().as_deref(),
-                        self.radio_group_name().as_ref(),
-                        Some(&*tree_root),
-                    ) {
-                        o.SetChecked(true, can_gc);
-                    } else {
-                        self.SetChecked(false, can_gc);
-                    }
-                } else {
-                    self.SetChecked(false, can_gc);
-                }
-            },
-            _ => (),
-        }
+        // Step 2 and 3
+        ty.as_specific()
+            .legacy_canceled_activation_behavior(self, cache, can_gc);
 
         self.value_changed(can_gc);
     }
 
     /// <https://html.spec.whatwg.org/multipage/#input-activation-behavior>
-    fn activation_behavior(&self, _event: &Event, _target: &EventTarget, can_gc: CanGc) {
-        match self.input_type() {
-            // https://html.spec.whatwg.org/multipage/#submit-button-state-(type=submit):activation-behavior
-            // https://html.spec.whatwg.org/multipage/#submit-button-state-(type=image):activation-behavior
-            InputType::Submit | InputType::Image => {
-                // Step 1: If the element does not have a form owner, then return.
-                if let Some(form_owner) = self.form_owner() {
-                    // Step 2: If the element's node document is not fully active, then return.
-                    let document = self.owner_document();
-
-                    if !document.is_fully_active() {
-                        return;
-                    }
-
-                    // Step 3: Submit the element's form owner from the element with userInvolvement
-                    // set to event's user navigation involvement.
-                    form_owner.submit(
-                        SubmittedFrom::NotFromForm,
-                        FormSubmitterElement::Input(self),
-                        can_gc,
-                    )
-                }
-            },
-            InputType::Reset => {
-                // https://html.spec.whatwg.org/multipage/#reset-button-state-(type=reset):activation-behavior
-                // Step 1: If the element does not have a form owner, then return.
-                if let Some(form_owner) = self.form_owner() {
-                    let document = self.owner_document();
-
-                    // Step 2: If the element's node document is not fully active, then return.
-                    if !document.is_fully_active() {
-                        return;
-                    }
-
-                    // Step 3: Reset the form owner from the element.
-                    form_owner.reset(ResetFrom::NotFromForm, can_gc);
-                }
-            },
-            // https://html.spec.whatwg.org/multipage/#checkbox-state-(type=checkbox):activation-behavior
-            // https://html.spec.whatwg.org/multipage/#radio-button-state-(type=radio):activation-behavior
-            InputType::Checkbox | InputType::Radio => {
-                // Step 1: If the element is not connected, then return.
-                if !self.upcast::<Node>().is_connected() {
-                    return;
-                }
-
-                let target = self.upcast::<EventTarget>();
-
-                // Step 2: Fire an event named input at the element with the bubbles and composed
-                // attributes initialized to true.
-                target.fire_event_with_params(
-                    atom!("input"),
-                    EventBubbles::Bubbles,
-                    EventCancelable::NotCancelable,
-                    EventComposed::Composed,
-                    can_gc,
-                );
-
-                // Step 3: Fire an event named change at the element with the bubbles attribute
-                // initialized to true.
-                target.fire_bubbling_event(atom!("change"), can_gc);
-            },
-            // https://html.spec.whatwg.org/multipage/#file-upload-state-(type=file):input-activation-behavior
-            InputType::File => {
-                self.select_files(None);
-            },
-            // https://html.spec.whatwg.org/multipage/#color-state-(type=color):input-activation-behavior
-            InputType::Color => {
-                self.show_the_picker_if_applicable();
-            },
-            _ => (),
-        }
-    }
-}
-
-/// <https://html.spec.whatwg.org/multipage/#attr-input-accept>
-fn filter_from_accept(s: &DOMString) -> Vec<FilterPattern> {
-    let mut filter = vec![];
-    for p in split_commas(&s.str()) {
-        let p = p.trim();
-        if let Some('.') = p.chars().next() {
-            filter.push(FilterPattern(p[1..].to_string()));
-        } else if let Some(exts) = mime_guess::get_mime_extensions_str(p) {
-            for ext in exts {
-                filter.push(FilterPattern(ext.to_string()));
-            }
-        }
-    }
-
-    filter
-}
-
-fn round_halves_positive(n: f64) -> f64 {
-    // WHATWG specs about input steps say to round to the nearest step,
-    // rounding halves always to positive infinity.
-    // This differs from Rust's .round() in the case of -X.5.
-    if n.fract() == -0.5 {
-        n.ceil()
-    } else {
-        n.round()
+    fn activation_behavior(&self, event: &Event, target: &EventTarget, can_gc: CanGc) {
+        self.input_type()
+            .as_specific()
+            .activation_behavior(self, event, target, can_gc)
     }
 }
 
@@ -3929,25 +2773,4 @@ impl PendingWebDriverResponse {
             let _ = self.response_sender.send(Err(ErrorStatus::InvalidArgument));
         }
     }
-}
-
-fn parse_color_value(value: &str, url: Url) -> AbsoluteColor {
-    // TODO: Use a dummy url here, like gecko
-    // https://searchfox.org/firefox-main/rev/3eaf7e2acf8186eb7aa579561eaa1312cb89132b/servo/ports/geckolib/glue.rs#8931
-    let urlextradata = url.into();
-    let context = ParserContext::new(
-        Origin::Author,
-        &urlextradata,
-        Some(CssRuleType::Style),
-        ParsingMode::DEFAULT,
-        QuirksMode::NoQuirks,
-        Default::default(),
-        None,
-        None,
-    );
-    let mut input = ParserInput::new(value);
-    let mut input = Parser::new(&mut input);
-    Color::parse_and_compute(&context, &mut input, None)
-        .map(|computed_color| computed_color.resolve_to_absolute(&AbsoluteColor::BLACK))
-        .unwrap_or(AbsoluteColor::BLACK)
 }

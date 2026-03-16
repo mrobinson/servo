@@ -1,0 +1,83 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+use script_bindings::codegen::GenericBindings::HTMLInputElementBinding::HTMLInputElementMethods;
+use script_bindings::domstring::DOMString;
+use script_bindings::script_runtime::CanGc;
+
+use crate::dom::bindings::inheritance::Castable;
+use crate::dom::event::{Event, EventBubbles, EventCancelable, EventComposed};
+use crate::dom::eventtarget::EventTarget;
+use crate::dom::htmlinputelement::{
+    HTMLInputElement, InputActivationState,
+};
+use crate::dom::inputtype::{InputType, SpecificInputType};
+use crate::dom::node::Node;
+
+pub(crate) struct CheckboxInputType();
+
+impl SpecificInputType for CheckboxInputType {
+    /// <https://html.spec.whatwg.org/multipage/#checkbox-state-(type=checkbox):suffering-from-being-missing>
+    fn suffers_from_being_missing(&self, input: &HTMLInputElement, _value: &DOMString) -> bool {
+        input.Required() && !input.Checked()
+    }
+
+    /// <https://html.spec.whatwg.org/multipage/#checkbox-state-(type=checkbox):input-activation-behavior>
+    fn activation_behavior(
+        &self,
+        input: &HTMLInputElement,
+        _event: &Event,
+        _target: &EventTarget,
+        can_gc: CanGc,
+    ) {
+        // Step 1: If the element is not connected, then return.
+        if !input.upcast::<Node>().is_connected() {
+            return;
+        }
+
+        let target = input.upcast::<EventTarget>();
+
+        // Step 2: Fire an event named input at the element with the bubbles and composed
+        // attributes initialized to true.
+        target.fire_event_with_params(
+            atom!("input"),
+            EventBubbles::Bubbles,
+            EventCancelable::NotCancelable,
+            EventComposed::Composed,
+            can_gc,
+        );
+
+        // Step 3: Fire an event named change at the element with the bubbles attribute
+        // initialized to true.
+        target.fire_bubbling_event(atom!("change"), can_gc);
+    }
+
+    /// <https://html.spec.whatwg.org/multipage/#the-input-element:legacy-pre-activation-behavior>
+    fn legacy_pre_activation_behavior(
+        &self,
+        input: &HTMLInputElement,
+        can_gc: CanGc,
+    ) -> Option<InputActivationState> {
+        let was_checked = input.Checked();
+        let was_indeterminate = input.Indeterminate();
+        input.SetIndeterminate(false);
+        input.SetChecked(!was_checked, can_gc);
+        Some(InputActivationState {
+            checked: was_checked,
+            indeterminate: was_indeterminate,
+            checked_radio: None,
+            old_type: InputType::Checkbox,
+        })
+    }
+
+    /// <https://html.spec.whatwg.org/multipage/#the-input-element:legacy-canceled-activation-behavior>
+    fn legacy_canceled_activation_behavior(
+        &self,
+        input: &HTMLInputElement,
+        cache: InputActivationState,
+        can_gc: CanGc,
+    ) {
+        input.SetIndeterminate(cache.indeterminate);
+        input.SetChecked(cache.checked, can_gc);
+    }
+}
