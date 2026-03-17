@@ -79,7 +79,7 @@ use crate::dom::html::htmldatalistelement::HTMLDataListElement;
 use crate::dom::html::htmlelement::HTMLElement;
 use crate::dom::html::htmlformelement::FormControl;
 use crate::dom::html::htmliframeelement::HTMLIFrameElement;
-use crate::dom::html::htmlinputelement::{HTMLInputElement};
+use crate::dom::html::htmlinputelement::HTMLInputElement;
 use crate::dom::html::htmloptgroupelement::HTMLOptGroupElement;
 use crate::dom::html::htmloptionelement::HTMLOptionElement;
 use crate::dom::html::htmlselectelement::HTMLSelectElement;

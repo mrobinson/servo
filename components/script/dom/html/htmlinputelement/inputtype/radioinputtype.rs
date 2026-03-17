@@ -17,10 +17,8 @@ use crate::dom::element::AttributeMutation;
 use crate::dom::event::{Event, EventBubbles, EventCancelable, EventComposed};
 use crate::dom::eventtarget::EventTarget;
 use crate::dom::htmlformelement::{FormControl, HTMLFormElement};
-use crate::dom::htmlinputelement::{
-    HTMLInputElement, InputActivationState,
-};
 use crate::dom::htmlinputelement::inputtype::{InputType, SpecificInputType};
+use crate::dom::htmlinputelement::{HTMLInputElement, InputActivationState};
 use crate::dom::node::{BindContext, Node, ShadowIncluding, UnbindContext};
 use crate::dom::validation::Validatable;
 use crate::dom::validitystate::ValidationFlags;
@@ -110,7 +108,7 @@ impl SpecificInputType for RadioInputType {
             checked: was_checked,
             indeterminate: false,
             checked_radio: checked_member.as_deref().map(DomRoot::from_ref),
-            old_type: input.input_type()
+            old_type: input.input_type(),
         })
     }
 

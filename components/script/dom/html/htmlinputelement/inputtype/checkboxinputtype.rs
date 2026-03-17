@@ -9,9 +9,7 @@ use crate::dom::bindings::inheritance::Castable;
 use crate::dom::event::{Event, EventBubbles, EventCancelable, EventComposed};
 use crate::dom::eventtarget::EventTarget;
 use crate::dom::htmlinputelement::inputtype::SpecificInputType;
-use crate::dom::htmlinputelement::{
-    HTMLInputElement, InputActivationState,
-};
+use crate::dom::htmlinputelement::{HTMLInputElement, InputActivationState};
 use crate::dom::node::Node;
 
 #[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]

@@ -4,22 +4,23 @@
 use html5ever::{local_name, ns};
 use js::context::JSContext;
 use markup5ever::QualName;
-use style::selector_parser::PseudoElement;
 use script_bindings::codegen::GenericBindings::CharacterDataBinding::CharacterDataMethods;
 use script_bindings::codegen::GenericBindings::DocumentBinding::DocumentMethods;
 use script_bindings::codegen::GenericBindings::HTMLInputElementBinding::HTMLInputElementMethods;
 use script_bindings::codegen::GenericBindings::NodeBinding::NodeMethods;
 use script_bindings::root::{Dom, DomRoot};
 use script_bindings::script_runtime::CanGc;
+use style::selector_parser::PseudoElement;
+
 use crate::dom::bindings::cell::DomRefCell;
+use crate::dom::bindings::inheritance::Castable;
 use crate::dom::bindings::str::DOMString;
 use crate::dom::characterdata::CharacterData;
+use crate::dom::document::Document;
 use crate::dom::element::{CustomElementCreationMode, Element, ElementCreator};
+use crate::dom::htmlinputelement::inputtype::{InputType, SpecificInputType};
 use crate::dom::node::{Node, NodeTraits};
 use crate::dom::types::HTMLInputElement;
-use crate::dom::bindings::inheritance::Castable;
-use crate::dom::document::Document;
-use crate::dom::htmlinputelement::inputtype::{InputType, SpecificInputType};
 
 const PASSWORD_REPLACEMENT_CHAR: char = '●';
 

@@ -68,7 +68,7 @@ use crate::dom::html::htmlelement::HTMLElement;
 use crate::dom::html::htmlfieldsetelement::HTMLFieldSetElement;
 use crate::dom::html::htmlformcontrolscollection::HTMLFormControlsCollection;
 use crate::dom::html::htmlimageelement::HTMLImageElement;
-use crate::dom::html::htmlinputelement::{HTMLInputElement};
+use crate::dom::html::htmlinputelement::HTMLInputElement;
 use crate::dom::html::htmllabelelement::HTMLLabelElement;
 use crate::dom::html::htmllegendelement::HTMLLegendElement;
 use crate::dom::html::htmlobjectelement::HTMLObjectElement;
@@ -1287,7 +1287,10 @@ impl HTMLFormElement {
             let input_matches = child_element
                 .downcast::<HTMLInputElement>()
                 .is_some_and(|input| {
-                    matches!(input.input_type(), InputType::Text(_) | InputType::Search(_))
+                    matches!(
+                        input.input_type(),
+                        InputType::Text(_) | InputType::Search(_)
+                    )
                 });
             let textarea_matches = child_element.is::<HTMLTextAreaElement>();
             let dirname = child_element.get_string_attribute(&local_name!("dirname"));

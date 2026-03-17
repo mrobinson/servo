@@ -9,16 +9,13 @@ use std::{f64, ptr};
 use base::generic_channel::GenericSender;
 use base::text::Utf16CodeUnitLength;
 use dom_struct::dom_struct;
-use embedder_traits::{
-    EmbedderControlRequest, InputMethodRequest,
-    RgbColor, SelectedFile,
-};
+use embedder_traits::{EmbedderControlRequest, InputMethodRequest, RgbColor, SelectedFile};
 use encoding_rs::Encoding;
 use fonts::{ByteIndex, TextByteRange};
-use html5ever::{local_name, LocalName, Prefix};
+use html5ever::{LocalName, Prefix, local_name};
 use js::context::JSContext;
 use js::jsapi::{
-    ClippedTime, DateGetMsecSinceEpoch, Handle, JSObject, JS_ClearPendingException, NewDateObject,
+    ClippedTime, DateGetMsecSinceEpoch, Handle, JS_ClearPendingException, JSObject, NewDateObject,
     NewUCRegExpObject, ObjectIsDate, RegExpFlag_UnicodeSets, RegExpFlags,
 };
 use js::jsval::UndefinedValue;
@@ -33,7 +30,7 @@ use style::str::split_commas;
 use stylo_atoms::Atom;
 use stylo_dom::ElementState;
 use time::OffsetDateTime;
-use unicode_bidi::{bidi_class, BidiClass};
+use unicode_bidi::{BidiClass, bidi_class};
 use webdriver::error::ErrorStatus;
 
 use crate::clipboard_provider::EmbedderClipboardProvider;
@@ -67,9 +64,11 @@ use crate::dom::html::htmlformelement::{
     FormControl, FormDatum, FormDatumValue, FormSubmitterElement, HTMLFormElement, SubmittedFrom,
 };
 use crate::dom::htmlinputelement::inputtype::colorinputtype::ColorInputShadowTree;
-use crate::dom::htmlinputelement::inputtype::{InputType};
-use crate::dom::htmlinputelement::inputtype::radioinputtype::{broadcast_radio_checked, perform_radio_group_validation};
+use crate::dom::htmlinputelement::inputtype::radioinputtype::{
+    broadcast_radio_checked, perform_radio_group_validation,
+};
 use crate::dom::htmlinputelement::inputtype::textinputtype::TextInputWidgetShadowTree;
+use crate::dom::htmlinputelement::inputtype::InputType;
 use crate::dom::keyboardevent::KeyboardEvent;
 use crate::dom::node::{
     BindContext, CloneChildrenFlag, Node, NodeDamage, NodeTraits, ShadowIncluding, UnbindContext,
@@ -78,7 +77,7 @@ use crate::dom::nodelist::NodeList;
 use crate::dom::text::Text;
 use crate::dom::textcontrol::{TextControlElement, TextControlSelection};
 use crate::dom::types::{CharacterData, FocusEvent, MouseEvent};
-use crate::dom::validation::{is_barred_by_datalist_ancestor, Validatable};
+use crate::dom::validation::{Validatable, is_barred_by_datalist_ancestor};
 use crate::dom::validitystate::{ValidationFlags, ValidityState};
 use crate::dom::virtualmethods::VirtualMethods;
 use crate::realms::enter_realm;
@@ -995,10 +994,6 @@ impl HTMLInputElement {
         self.textinput.borrow_mut()
     }
 
-    fn filelist(&self) -> Option<DomRoot<FileList>> {
-        self.filelist.get()
-    }
-
     fn placeholder(&self) -> Ref<'_, DOMString> {
         self.placeholder.borrow()
     }
@@ -1126,13 +1121,17 @@ impl HTMLInputElementMethods<crate::DomTypeHolder> for HTMLInputElement {
 
     /// <https://html.spec.whatwg.org/multipage/#dom-input-files>
     fn GetFiles(&self) -> Option<DomRoot<FileList>> {
-        self.filelist.get().as_ref().cloned()
+        self.input_type()
+            .as_specific()
+            .get_files(self)
+            .as_ref()
+            .cloned()
     }
 
     /// <https://html.spec.whatwg.org/multipage/#dom-input-files>
     fn SetFiles(&self, files: Option<&FileList>) {
-        if matches!(self.input_type(), InputType::File(_)) && files.is_some() {
-            self.filelist.set(files);
+        if let Some(files) = files {
+            self.input_type().as_specific().set_files(self, files)
         }
     }
 
@@ -1205,7 +1204,7 @@ impl HTMLInputElementMethods<crate::DomTypeHolder> for HTMLInputElement {
                 }),
             ValueMode::Filename => {
                 let mut path = DOMString::from("");
-                match self.filelist.get() {
+                match self.input_type().as_specific().get_files(self) {
                     Some(ref fl) => match fl.Item(0) {
                         Some(ref f) => {
                             path.push_str("C:\\fakepath\\");
@@ -1260,7 +1259,7 @@ impl HTMLInputElementMethods<crate::DomTypeHolder> for HTMLInputElement {
                 if value.is_empty() {
                     let window = self.owner_window();
                     let fl = FileList::new(&window, vec![], can_gc);
-                    self.filelist.set(Some(&fl));
+                    self.input_type().as_specific().set_files(self, &fl)
                 } else {
                     return Err(Error::InvalidState(None));
                 }
@@ -1776,10 +1775,9 @@ impl HTMLInputElement {
         }
 
         if matches!(input_type, InputType::File(_)) {
-            self.filelist
-                .set(Some(&FileList::new(&self.owner_window(), vec![], can_gc)));
-        } else {
-            self.filelist.set(None);
+            input_type
+                .as_specific()
+                .set_files(self, &FileList::new(&self.owner_window(), vec![], can_gc));
         }
 
         self.value_changed(can_gc);
@@ -1796,10 +1794,10 @@ impl HTMLInputElement {
         // Step 3. Set checkedness based on presence of content attribute.
         self.update_checked_state(self.DefaultChecked(), false, can_gc);
         // Step 4. Empty selected files
-        if self.filelist.get().is_some() {
+        if self.input_type().as_specific().get_files(self).is_some() {
             let window = self.owner_window();
             let filelist = FileList::new(&window, vec![], can_gc);
-            self.filelist.set(Some(&filelist));
+            self.input_type().as_specific().set_files(self, &filelist);
         }
 
         // Step 5. Invoke the value sanitization algorithm iff the type attribute's
@@ -1946,7 +1944,9 @@ impl HTMLInputElement {
     fn value_changed(&self, can_gc: CanGc) {
         self.maybe_update_shared_selection();
         self.update_related_validity_states(can_gc);
-        self.input_type().as_specific().update_shadow_tree(self, can_gc);
+        self.input_type()
+            .as_specific()
+            .update_shadow_tree(self, can_gc);
         self.get_or_create_shadow_tree(can_gc).update(self, can_gc);
     }
 
@@ -1994,7 +1994,7 @@ impl HTMLInputElement {
             //
             // Note: This is annoying.
             if self.Multiple() {
-                if let Some(filelist) = self.filelist.get() {
+                if let Some(filelist) = self.input_type().as_specific().get_files(self) {
                     files = filelist.iter_files().map(|file| file.as_rooted()).collect();
                 }
             }
@@ -2023,8 +2023,9 @@ impl HTMLInputElement {
                 .unwrap_or_default();
         }
 
-        self.filelist
-            .set(Some(&FileList::new(&window, files, can_gc)));
+        self.input_type()
+            .as_specific()
+            .set_files(self, &FileList::new(&window, files, can_gc));
 
         let target = self.upcast::<EventTarget>();
         target.fire_event_with_params(
@@ -2162,7 +2163,7 @@ impl VirtualMethods for HTMLInputElement {
                         if matches!(new_type, InputType::File(_)) {
                             let window = self.owner_window();
                             let filelist = FileList::new(&window, vec![], CanGc::from_cx(cx));
-                            self.filelist.set(Some(&filelist));
+                            new_type.as_specific().set_files(self, &filelist)
                         }
 
                         let new_value_mode = self.value_mode();
@@ -2584,7 +2585,7 @@ impl Activatable for HTMLInputElement {
             InputType::Reset(_) |
             InputType::File(_) |
             InputType::Image(_) |
-            InputType::Button(_)=> self.is_mutable(),
+            InputType::Button(_) => self.is_mutable(),
             // https://html.spec.whatwg.org/multipage/#checkbox-state-(type=checkbox):input-activation-behavior
             // https://html.spec.whatwg.org/multipage/#radio-button-state-(type=radio):input-activation-behavior
             // https://html.spec.whatwg.org/multipage/#color-state-(type=color):input-activation-behavior

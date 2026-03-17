@@ -1,18 +1,20 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
-use js::context::JSContext;
-use stylo_atoms::Atom;
-use time::OffsetDateTime;
 use embedder_traits::InputMethodType;
+use js::context::JSContext;
 use script_bindings::codegen::GenericBindings::HTMLInputElementBinding::HTMLInputElementMethods;
 use script_bindings::domstring::DOMString;
+use script_bindings::root::DomRoot;
 use script_bindings::script_runtime::CanGc;
+use stylo_atoms::Atom;
+use time::OffsetDateTime;
+
 use crate::dom::attr::Attr;
 use crate::dom::element::AttributeMutation;
 use crate::dom::event::Event;
 use crate::dom::eventtarget::EventTarget;
-use crate::dom::htmlinputelement::{HTMLInputElement, InputActivationState, ValueMode};
+use crate::dom::filelist::FileList;
 use crate::dom::htmlinputelement::inputtype::buttoninputtype::ButtonInputType;
 use crate::dom::htmlinputelement::inputtype::checkboxinputtype::CheckboxInputType;
 use crate::dom::htmlinputelement::inputtype::colorinputtype::ColorInputType;
@@ -35,6 +37,7 @@ use crate::dom::htmlinputelement::inputtype::textinputtype::TextInputType;
 use crate::dom::htmlinputelement::inputtype::timeinputtype::TimeInputType;
 use crate::dom::htmlinputelement::inputtype::urlinputtype::UrlInputType;
 use crate::dom::htmlinputelement::inputtype::weekinputtype::WeekInputType;
+use crate::dom::htmlinputelement::{HTMLInputElement, InputActivationState, ValueMode};
 use crate::dom::node::{BindContext, UnbindContext};
 
 pub(crate) mod buttoninputtype;
@@ -156,7 +159,7 @@ impl InputType {
     }
 
     pub fn file() -> Self {
-        Self::File(FileInputType())
+        Self::File(FileInputType::default())
     }
 
     pub fn hidden() -> Self {
@@ -435,6 +438,12 @@ pub(crate) trait SpecificInputType {
     fn show_the_picker_if_applicable(&self, _input: &HTMLInputElement) {}
 
     fn select_files(&self, _input: &HTMLInputElement, _test_paths: Option<Vec<DOMString>>) {}
+
+    fn get_files(&self, _input: &HTMLInputElement) -> Option<DomRoot<FileList>> {
+        None
+    }
+
+    fn set_files(&self, _input: &HTMLInputElement, _filelist: &FileList) {}
 
     fn update_shadow_tree(&self, _input: &HTMLInputElement, _can_gc: CanGc) {}
 

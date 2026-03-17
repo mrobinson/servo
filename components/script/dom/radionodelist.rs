@@ -13,7 +13,7 @@ use crate::dom::bindings::reflector::reflect_dom_object;
 use crate::dom::bindings::root::DomRoot;
 use crate::dom::bindings::str::DOMString;
 use crate::dom::html::htmlformelement::HTMLFormElement;
-use crate::dom::html::htmlinputelement::{HTMLInputElement};
+use crate::dom::html::htmlinputelement::HTMLInputElement;
 use crate::dom::htmlinputelement::inputtype::InputType;
 use crate::dom::node::Node;
 use crate::dom::nodelist::{NodeList, NodeListType, RadioList, RadioListMode};

@@ -7,7 +7,7 @@ use script_bindings::script_runtime::CanGc;
 use crate::dom::event::Event;
 use crate::dom::eventtarget::EventTarget;
 use crate::dom::htmlformelement::{FormControl, FormSubmitterElement, SubmittedFrom};
-use crate::dom::htmlinputelement::{HTMLInputElement};
+use crate::dom::htmlinputelement::HTMLInputElement;
 use crate::dom::htmlinputelement::inputtype::SpecificInputType;
 use crate::dom::node::NodeTraits;
 

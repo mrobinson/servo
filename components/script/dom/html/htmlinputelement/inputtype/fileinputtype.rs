@@ -8,26 +8,34 @@ use embedder_traits::{EmbedderControlRequest, FilePickerRequest, FilterPattern};
 use script_bindings::codegen::GenericBindings::FileListBinding::FileListMethods;
 use script_bindings::codegen::GenericBindings::HTMLInputElementBinding::HTMLInputElementMethods;
 use script_bindings::domstring::DOMString;
-use script_bindings::root::DomRoot;
 use script_bindings::script_runtime::CanGc;
 use style::str::split_commas;
 
+use crate::dom::bindings::root::DomRoot;
 use crate::dom::document_embedder_controls::ControlElement;
 use crate::dom::event::Event;
 use crate::dom::eventtarget::EventTarget;
-use crate::dom::htmlinputelement::{HTMLInputElement};
+use crate::dom::filelist::FileList;
+use crate::dom::htmlinputelement::HTMLInputElement;
 use crate::dom::htmlinputelement::inputtype::SpecificInputType;
 use crate::dom::node::NodeTraits;
 
 const DEFAULT_FILE_INPUT_VALUE: &str = "No file chosen";
 const DEFAULT_FILE_INPUT_MULTIPLE_VALUE: &str = "No files chosen";
 
-#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
-pub(crate) struct FileInputType();
+#[derive(Clone, Copy, Debug, Default, JSTraceable, MallocSizeOf, PartialEq)]
+pub(crate) struct FileInputType {
+    // filelist: MutNullableDom<FileList>
+}
 
 impl SpecificInputType for FileInputType {
+    /// <https://html.spec.whatwg.org/multipage/#file-upload-state-(type=file):suffering-from-being-missing>
+    fn suffers_from_being_missing(&self, input: &HTMLInputElement, _value: &DOMString) -> bool {
+        input.Required() && input.filelist.get().is_none_or(|files| files.Length() == 0)
+    }
+
     fn value_for_shadow_dom(&self, input: &HTMLInputElement) -> DOMString {
-        let Some(filelist) = input.filelist() else {
+        let Some(filelist) = input.filelist.get() else {
             if input.Multiple() {
                 return DEFAULT_FILE_INPUT_MULTIPLE_VALUE.into();
             }
@@ -45,11 +53,6 @@ impl SpecificInputType for FileInputType {
             return DEFAULT_FILE_INPUT_VALUE.into();
         };
         first_item.name().to_string().into()
-    }
-
-    /// <https://html.spec.whatwg.org/multipage/#file-upload-state-(type=file):suffering-from-being-missing>
-    fn suffers_from_being_missing(&self, input: &HTMLInputElement, _value: &DOMString) -> bool {
-        input.Required() && input.filelist().is_none_or(|files| files.Length() == 0)
     }
 
     /// <https://html.spec.whatwg.org/multipage/#file-upload-state-(type=file):input-activation-behavior>
@@ -96,6 +99,14 @@ impl SpecificInputType for FileInputType {
                 }),
                 None,
             );
+    }
+
+    fn get_files(&self, input: &HTMLInputElement) -> Option<DomRoot<FileList>> {
+        input.filelist.get()
+    }
+
+    fn set_files(&self, input: &HTMLInputElement, filelist: &FileList) {
+        input.filelist.set(Some(filelist))
     }
 }
 
