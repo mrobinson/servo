@@ -67,7 +67,7 @@ use crate::dom::html::htmlformelement::{
     FormControl, FormDatum, FormDatumValue, FormSubmitterElement, HTMLFormElement, SubmittedFrom,
 };
 use crate::dom::htmlinputelement::inputtype::colorinputtype::ColorInputShadowTree;
-use crate::dom::htmlinputelement::inputtype::InputType;
+use crate::dom::htmlinputelement::inputtype::{InputType};
 use crate::dom::htmlinputelement::inputtype::radioinputtype::{broadcast_radio_checked, perform_radio_group_validation};
 use crate::dom::htmlinputelement::inputtype::textinputtype::TextInputWidgetShadowTree;
 use crate::dom::keyboardevent::KeyboardEvent;
@@ -138,7 +138,7 @@ impl InputElementShadowTree {
             .unwrap_or_else(|| element.attach_ua_shadow_root(cx, true));
         let shadow_root = shadow_root.upcast();
 
-        if input_element.input_type() == InputType::Color {
+        if matches!(input_element.input_type(), InputType::Color(_)) {
             return Self::ColorInput(ColorInputShadowTree::new(cx, shadow_root));
         }
         if input_element.renders_as_text_input_widget() {
@@ -148,7 +148,7 @@ impl InputElementShadowTree {
     }
 
     fn is_valid_for_element(&self, input_element: &HTMLInputElement) -> bool {
-        if input_element.input_type() == InputType::Color {
+        if matches!(input_element.input_type(), InputType::Color(_)) {
             return matches!(self, InputElementShadowTree::ColorInput(_));
         }
         if input_element.renders_as_text_input_widget() {
@@ -258,7 +258,7 @@ impl HTMLInputElement {
                 prefix,
                 document,
             ),
-            input_type: Cell::new(Default::default()),
+            input_type: Cell::new(InputType::text()),
             placeholder: DomRefCell::new(DOMString::new()),
             checked_changed: Cell::new(false),
             maxlength: Cell::new(DEFAULT_MAX_LENGTH),
@@ -302,7 +302,7 @@ impl HTMLInputElement {
 
     pub(crate) fn auto_directionality(&self) -> Option<String> {
         match self.input_type() {
-            InputType::Text | InputType::Search | InputType::Url | InputType::Email => {
+            InputType::Text(_) | InputType::Search(_) | InputType::Url(_) | InputType::Email(_) => {
                 let value: String = self.Value().to_string();
                 Some(HTMLInputElement::directionality_from_value(&value))
             },
@@ -332,32 +332,32 @@ impl HTMLInputElement {
 
     // https://html.spec.whatwg.org/multipage/#dom-input-value
     /// <https://html.spec.whatwg.org/multipage/#concept-input-apply>
-    pub(crate) fn value_mode(&self) -> ValueMode {
+    fn value_mode(&self) -> ValueMode {
         match self.input_type() {
-            InputType::Submit |
-            InputType::Reset |
-            InputType::Button |
-            InputType::Image |
-            InputType::Hidden => ValueMode::Default,
+            InputType::Submit(_) |
+            InputType::Reset(_) |
+            InputType::Button(_) |
+            InputType::Image(_) |
+            InputType::Hidden(_) => ValueMode::Default,
 
-            InputType::Checkbox | InputType::Radio => ValueMode::DefaultOn,
+            InputType::Checkbox(_) | InputType::Radio(_) => ValueMode::DefaultOn,
 
-            InputType::Color |
-            InputType::Date |
-            InputType::DatetimeLocal |
-            InputType::Email |
-            InputType::Month |
-            InputType::Number |
-            InputType::Password |
-            InputType::Range |
-            InputType::Search |
-            InputType::Tel |
-            InputType::Text |
-            InputType::Time |
-            InputType::Url |
-            InputType::Week => ValueMode::Value,
+            InputType::Color(_) |
+            InputType::Date(_) |
+            InputType::DatetimeLocal(_) |
+            InputType::Email(_) |
+            InputType::Month(_) |
+            InputType::Number(_) |
+            InputType::Password(_) |
+            InputType::Range(_) |
+            InputType::Search(_) |
+            InputType::Tel(_) |
+            InputType::Text(_) |
+            InputType::Time(_) |
+            InputType::Url(_) |
+            InputType::Week(_) => ValueMode::Value,
 
-            InputType::File => ValueMode::Filename,
+            InputType::File(_) => ValueMode::Filename,
         }
     }
 
@@ -370,51 +370,51 @@ impl HTMLInputElement {
     pub(crate) fn is_nontypeable(&self) -> bool {
         matches!(
             self.input_type(),
-            InputType::Button |
-                InputType::Checkbox |
-                InputType::Color |
-                InputType::File |
-                InputType::Hidden |
-                InputType::Image |
-                InputType::Radio |
-                InputType::Range |
-                InputType::Reset |
-                InputType::Submit
+            InputType::Button(_) |
+                InputType::Checkbox(_) |
+                InputType::Color(_) |
+                InputType::File(_) |
+                InputType::Hidden(_) |
+                InputType::Image(_) |
+                InputType::Radio(_) |
+                InputType::Range(_) |
+                InputType::Reset(_) |
+                InputType::Submit(_)
         )
     }
 
     #[inline]
     pub(crate) fn is_submit_button(&self) -> bool {
         let input_type = self.input_type.get();
-        input_type == InputType::Submit || input_type == InputType::Image
+        matches!(input_type, InputType::Submit(_) | InputType::Image(_))
     }
 
     fn does_minmaxlength_apply(&self) -> bool {
         matches!(
             self.input_type(),
-            InputType::Text |
-                InputType::Search |
-                InputType::Url |
-                InputType::Tel |
-                InputType::Email |
-                InputType::Password
+            InputType::Text(_) |
+                InputType::Search(_) |
+                InputType::Url(_) |
+                InputType::Tel(_) |
+                InputType::Email(_) |
+                InputType::Password(_)
         )
     }
 
     fn does_pattern_apply(&self) -> bool {
         matches!(
             self.input_type(),
-            InputType::Text |
-                InputType::Search |
-                InputType::Url |
-                InputType::Tel |
-                InputType::Email |
-                InputType::Password
+            InputType::Text(_) |
+                InputType::Search(_) |
+                InputType::Url(_) |
+                InputType::Tel(_) |
+                InputType::Email(_) |
+                InputType::Password(_)
         )
     }
 
     fn does_multiple_apply(&self) -> bool {
-        self.input_type() == InputType::Email
+        matches!(self.input_type(), InputType::Email(_))
     }
 
     // valueAsNumber, step, min, and max all share the same set of
@@ -422,20 +422,20 @@ impl HTMLInputElement {
     fn does_value_as_number_apply(&self) -> bool {
         matches!(
             self.input_type(),
-            InputType::Date |
-                InputType::Month |
-                InputType::Week |
-                InputType::Time |
-                InputType::DatetimeLocal |
-                InputType::Number |
-                InputType::Range
+            InputType::Date(_) |
+                InputType::Month(_) |
+                InputType::Week(_) |
+                InputType::Time(_) |
+                InputType::DatetimeLocal(_) |
+                InputType::Number(_) |
+                InputType::Range(_)
         )
     }
 
     fn does_value_as_date_apply(&self) -> bool {
         matches!(
             self.input_type(),
-            InputType::Date | InputType::Month | InputType::Week | InputType::Time
+            InputType::Date(_) | InputType::Month(_) | InputType::Week(_) | InputType::Time(_)
         )
     }
 
@@ -521,7 +521,7 @@ impl HTMLInputElement {
     /// <https://html.spec.whatwg.org/multipage#concept-input-min-default>
     fn default_minimum(&self) -> Option<f64> {
         match self.input_type() {
-            InputType::Range => Some(0.0),
+            InputType::Range(_) => Some(0.0),
             _ => None,
         }
     }
@@ -529,7 +529,7 @@ impl HTMLInputElement {
     /// <https://html.spec.whatwg.org/multipage#concept-input-max-default>
     fn default_maximum(&self) -> Option<f64> {
         match self.input_type() {
-            InputType::Range => Some(100.0),
+            InputType::Range(_) => Some(100.0),
             _ => None,
         }
     }
@@ -548,13 +548,13 @@ impl HTMLInputElement {
     /// <https://html.spec.whatwg.org/multipage#concept-input-step-default>
     fn default_step(&self) -> Option<f64> {
         match self.input_type() {
-            InputType::Date => Some(1.0),
-            InputType::Month => Some(1.0),
-            InputType::Week => Some(1.0),
-            InputType::Time => Some(60.0),
-            InputType::DatetimeLocal => Some(60.0),
-            InputType::Number => Some(1.0),
-            InputType::Range => Some(1.0),
+            InputType::Date(_) => Some(1.0),
+            InputType::Month(_) => Some(1.0),
+            InputType::Week(_) => Some(1.0),
+            InputType::Time(_) => Some(60.0),
+            InputType::DatetimeLocal(_) => Some(60.0),
+            InputType::Number(_) => Some(1.0),
+            InputType::Range(_) => Some(1.0),
             _ => None,
         }
     }
@@ -562,13 +562,13 @@ impl HTMLInputElement {
     /// <https://html.spec.whatwg.org/multipage#concept-input-step-scale>
     fn step_scale_factor(&self) -> f64 {
         match self.input_type() {
-            InputType::Date => 86400000.0,
-            InputType::Month => 1.0,
-            InputType::Week => 604800000.0,
-            InputType::Time => 1000.0,
-            InputType::DatetimeLocal => 1000.0,
-            InputType::Number => 1.0,
-            InputType::Range => 1.0,
+            InputType::Date(_) => 86400000.0,
+            InputType::Month(_) => 1.0,
+            InputType::Week(_) => 604800000.0,
+            InputType::Time(_) => 1000.0,
+            InputType::DatetimeLocal(_) => 1000.0,
+            InputType::Number(_) => 1.0,
+            InputType::Range(_) => 1.0,
             _ => unreachable!(),
         }
     }
@@ -609,7 +609,7 @@ impl HTMLInputElement {
     /// <https://html.spec.whatwg.org/multipage#concept-input-step-default-base>
     fn default_step_base(&self) -> Option<f64> {
         match self.input_type() {
-            InputType::Week => Some(-259200000.0),
+            InputType::Week(_) => Some(-259200000.0),
             _ => None,
         }
     }
@@ -919,25 +919,25 @@ impl HTMLInputElement {
     pub(crate) fn renders_as_text_input_widget(&self) -> bool {
         matches!(
             self.input_type(),
-            InputType::Date |
-                InputType::DatetimeLocal |
-                InputType::Email |
-                InputType::Month |
-                InputType::Number |
-                InputType::Password |
-                InputType::Range |
-                InputType::Search |
-                InputType::Tel |
-                InputType::Text |
-                InputType::Time |
-                InputType::Url |
-                InputType::Week
+            InputType::Date(_) |
+                InputType::DatetimeLocal(_) |
+                InputType::Email(_) |
+                InputType::Month(_) |
+                InputType::Number(_) |
+                InputType::Password(_) |
+                InputType::Range(_) |
+                InputType::Search(_) |
+                InputType::Tel(_) |
+                InputType::Text(_) |
+                InputType::Time(_) |
+                InputType::Url(_) |
+                InputType::Week(_)
         )
     }
 
     fn may_have_embedder_control(&self) -> bool {
         let el = self.upcast::<Element>();
-        self.input_type() == InputType::Color && !el.disabled_state()
+        matches!(self.input_type(), InputType::Color(_)) && !el.disabled_state()
     }
 
     fn handle_key_reaction(&self, action: KeyReaction, event: &Event, can_gc: CanGc) {
@@ -972,12 +972,12 @@ impl HTMLInputElement {
     fn value_for_shadow_dom(&self) -> DOMString {
         let input_type = self.input_type();
         match input_type {
-            InputType::Checkbox |
-            InputType::Radio |
-            InputType::Image |
-            InputType::Hidden |
-            InputType::Range |
-            InputType::File => input_type.as_specific().value_for_shadow_dom(self),
+            InputType::Checkbox(_) |
+            InputType::Radio(_) |
+            InputType::Image(_) |
+            InputType::Hidden(_) |
+            InputType::Range(_) |
+            InputType::File(_) => input_type.as_specific().value_for_shadow_dom(self),
             _ => {
                 if let Some(attribute_value) = self
                     .upcast::<Element>()
@@ -1033,11 +1033,11 @@ impl TextControlElement for HTMLInputElement {
     fn selection_api_applies(&self) -> bool {
         matches!(
             self.input_type(),
-            InputType::Text |
-                InputType::Search |
-                InputType::Url |
-                InputType::Tel |
-                InputType::Password
+            InputType::Text(_) |
+                InputType::Search(_) |
+                InputType::Url(_) |
+                InputType::Tel(_) |
+                InputType::Password(_)
         )
     }
 
@@ -1131,7 +1131,7 @@ impl HTMLInputElementMethods<crate::DomTypeHolder> for HTMLInputElement {
 
     /// <https://html.spec.whatwg.org/multipage/#dom-input-files>
     fn SetFiles(&self, files: Option<&FileList>) {
-        if self.input_type() == InputType::File && files.is_some() {
+        if matches!(self.input_type(), InputType::File(_)) && files.is_some() {
             self.filelist.set(files);
         }
     }
@@ -1498,7 +1498,7 @@ impl HTMLInputElementMethods<crate::DomTypeHolder> for HTMLInputElement {
     // Different from make_labels_getter because this one
     // conditionally returns null.
     fn GetLabels(&self, can_gc: CanGc) -> Option<DomRoot<NodeList>> {
-        if self.input_type() == InputType::Hidden {
+        if matches!(self.input_type(), InputType::Hidden(_)) {
             None
         } else {
             Some(self.labels_node_list.or_init(|| {
@@ -1650,18 +1650,18 @@ impl HTMLInputElement {
 
         match self.input_type() {
             // Step 5.1: it's a button but it is not submitter.
-            InputType::Submit | InputType::Button | InputType::Reset if !is_submitter => {
+            InputType::Submit(_) | InputType::Button(_) | InputType::Reset(_) if !is_submitter => {
                 return vec![];
             },
 
             // Step 5.1: it's the "Checkbox" or "Radio Button" and whose checkedness is false.
-            InputType::Radio | InputType::Checkbox => {
+            InputType::Radio(_) | InputType::Checkbox(_) => {
                 if !self.Checked() || name.is_empty() {
                     return vec![];
                 }
             },
 
-            InputType::File => {
+            InputType::File(_) => {
                 let mut datums = vec![];
 
                 // Step 5.2-5.7
@@ -1691,10 +1691,10 @@ impl HTMLInputElement {
                 return datums;
             },
 
-            InputType::Image => return vec![], // Unimplemented
+            InputType::Image(_) => return vec![], // Unimplemented
 
             // Step 5.10: it's a hidden field named _charset_
-            InputType::Hidden => {
+            InputType::Hidden(_) => {
                 if name.to_ascii_lowercase() == "_charset_" {
                     return vec![FormDatum {
                         ty,
@@ -1738,7 +1738,7 @@ impl HTMLInputElement {
             self.checked_changed.set(true);
         }
 
-        if self.input_type() == InputType::Radio && checked {
+        if matches!(self.input_type(), InputType::Radio(_)) && checked {
             broadcast_radio_checked(self, self.radio_group_name().as_ref(), can_gc);
         }
 
@@ -1770,12 +1770,12 @@ impl HTMLInputElement {
         self.textinput.borrow_mut().set_content(value);
 
         let input_type = self.input_type.get();
-        if matches!(input_type, InputType::Radio | InputType::Checkbox) {
+        if matches!(input_type, InputType::Radio(_) | InputType::Checkbox(_)) {
             self.update_checked_state(self.DefaultChecked(), false, can_gc);
             self.checked_changed.set(false);
         }
 
-        if input_type == InputType::File {
+        if matches!(input_type, InputType::File(_)) {
             self.filelist
                 .set(Some(&FileList::new(&self.owner_window(), vec![], can_gc)));
         } else {
@@ -1869,7 +1869,7 @@ impl HTMLInputElement {
         let submit_button = node
             .traverse_preorder(ShadowIncluding::No)
             .filter_map(DomRoot::downcast::<HTMLInputElement>)
-            .filter(|input| input.input_type() == InputType::Submit)
+            .filter(|input| matches!(input.input_type(), InputType::Submit(_)))
             .find(|r| r.form_owner() == owner);
         match submit_button {
             Some(ref button) => {
@@ -1889,18 +1889,18 @@ impl HTMLInputElement {
                         input.form_owner() == owner &&
                             matches!(
                                 input.input_type(),
-                                InputType::Text |
-                                    InputType::Search |
-                                    InputType::Url |
-                                    InputType::Tel |
-                                    InputType::Email |
-                                    InputType::Password |
-                                    InputType::Date |
-                                    InputType::Month |
-                                    InputType::Week |
-                                    InputType::Time |
-                                    InputType::DatetimeLocal |
-                                    InputType::Number
+                                InputType::Text(_) |
+                                    InputType::Search(_) |
+                                    InputType::Url(_) |
+                                    InputType::Tel(_) |
+                                    InputType::Email(_) |
+                                    InputType::Password(_) |
+                                    InputType::Date(_) |
+                                    InputType::Month(_) |
+                                    InputType::Week(_) |
+                                    InputType::Time(_) |
+                                    InputType::DatetimeLocal(_) |
+                                    InputType::Number(_)
                             )
                     });
 
@@ -1933,7 +1933,7 @@ impl HTMLInputElement {
 
     fn update_related_validity_states(&self, can_gc: CanGc) {
         match self.input_type() {
-            InputType::Radio => {
+            InputType::Radio(_) => {
                 perform_radio_group_validation(self, self.radio_group_name().as_ref(), can_gc)
             },
             _ => {
@@ -1946,6 +1946,7 @@ impl HTMLInputElement {
     fn value_changed(&self, can_gc: CanGc) {
         self.maybe_update_shared_selection();
         self.update_related_validity_states(can_gc);
+        self.input_type().as_specific().update_shadow_tree(self, can_gc);
         self.get_or_create_shadow_tree(can_gc).update(self, can_gc);
     }
 
@@ -2158,7 +2159,7 @@ impl VirtualMethods for HTMLInputElement {
                             el.set_read_write_state(false);
                         }
 
-                        if new_type == InputType::File {
+                        if matches!(new_type, InputType::File(_)) {
                             let window = self.owner_window();
                             let filelist = FileList::new(&window, vec![], CanGc::from_cx(cx));
                             self.filelist.set(Some(&filelist));
@@ -2220,7 +2221,7 @@ impl VirtualMethods for HTMLInputElement {
                         self.input_type()
                             .as_specific()
                             .signal_type_change(self, CanGc::from_cx(cx));
-                        self.input_type.set(InputType::default());
+                        self.input_type.set(InputType::text());
                         let el = self.upcast::<Element>();
 
                         let read_write = !(self.ReadOnly() || el.disabled_state());
@@ -2229,6 +2230,7 @@ impl VirtualMethods for HTMLInputElement {
                 }
 
                 self.update_placeholder_shown_state();
+                // self.input_type().as_specific().update_placeholder_contents(cx, self);
                 self.get_or_create_shadow_tree(CanGc::from_cx(cx))
                     .update_placeholder_contents(cx, self);
             },
@@ -2277,6 +2279,7 @@ impl VirtualMethods for HTMLInputElement {
                     }
                 }
                 self.update_placeholder_shown_state();
+                // self.input_type().as_specific().update_placeholder_contents(cx, self);
                 self.get_or_create_shadow_tree(CanGc::from_cx(cx))
                     .update_placeholder_contents(cx, self);
             },
@@ -2507,7 +2510,7 @@ impl Validatable for HTMLInputElement {
         // https://html.spec.whatwg.org/multipage/#the-readonly-attribute%3Abarred-from-constraint-validation
         // https://html.spec.whatwg.org/multipage/#the-datalist-element%3Abarred-from-constraint-validation
         match self.input_type() {
-            InputType::Hidden | InputType::Button | InputType::Reset => false,
+            InputType::Hidden(_) | InputType::Button(_) | InputType::Reset(_) => false,
             _ => {
                 !(self.upcast::<Element>().disabled_state() ||
                     self.ReadOnly() ||
@@ -2577,15 +2580,15 @@ impl Activatable for HTMLInputElement {
             // https://html.spec.whatwg.org/multipage/#image-button-state-(type=image):input-activation-behavior
             //
             // Although they do not have implicit activation behaviors, `type=button` is an activatable input event.
-            InputType::Submit |
-            InputType::Reset |
-            InputType::File |
-            InputType::Image |
-            InputType::Button => self.is_mutable(),
+            InputType::Submit(_) |
+            InputType::Reset(_) |
+            InputType::File(_) |
+            InputType::Image(_) |
+            InputType::Button(_)=> self.is_mutable(),
             // https://html.spec.whatwg.org/multipage/#checkbox-state-(type=checkbox):input-activation-behavior
             // https://html.spec.whatwg.org/multipage/#radio-button-state-(type=radio):input-activation-behavior
             // https://html.spec.whatwg.org/multipage/#color-state-(type=color):input-activation-behavior
-            InputType::Checkbox | InputType::Radio | InputType::Color => true,
+            InputType::Checkbox(_) | InputType::Radio(_) | InputType::Color(_) => true,
             _ => false,
         }
     }

@@ -4,6 +4,7 @@
 
 use crate::dom::htmlinputelement::inputtype::SpecificInputType;
 
+#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
 pub(crate) struct HiddenInputType();
 
 impl SpecificInputType for HiddenInputType {}

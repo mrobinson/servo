@@ -29,6 +29,7 @@ use crate::dom::htmlinputelement::inputtype::SpecificInputType;
 use crate::dom::node::{Node, NodeTraits, UnbindContext};
 use crate::dom::types::HTMLInputElement;
 
+#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
 pub(crate) struct ColorInputType();
 
 impl ColorInputType {

@@ -10,6 +10,7 @@ use crate::dom::htmlinputelement::{HTMLInputElement};
 use crate::dom::htmlinputelement::inputtype::SpecificInputType;
 use crate::dom::node::NodeTraits;
 
+#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
 pub(crate) struct ImageInputType();
 
 impl SpecificInputType for ImageInputType {

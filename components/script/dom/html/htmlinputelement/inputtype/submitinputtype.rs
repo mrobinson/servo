@@ -13,6 +13,7 @@ use crate::dom::node::NodeTraits;
 
 const DEFAULT_SUBMIT_VALUE: &str = "Submit";
 
+#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
 pub(crate) struct SubmitInputType();
 
 impl SpecificInputType for SubmitInputType {

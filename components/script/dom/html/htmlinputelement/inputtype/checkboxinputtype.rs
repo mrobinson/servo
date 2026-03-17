@@ -8,12 +8,13 @@ use script_bindings::script_runtime::CanGc;
 use crate::dom::bindings::inheritance::Castable;
 use crate::dom::event::{Event, EventBubbles, EventCancelable, EventComposed};
 use crate::dom::eventtarget::EventTarget;
+use crate::dom::htmlinputelement::inputtype::SpecificInputType;
 use crate::dom::htmlinputelement::{
     HTMLInputElement, InputActivationState,
 };
-use crate::dom::htmlinputelement::inputtype::{InputType, SpecificInputType};
 use crate::dom::node::Node;
 
+#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
 pub(crate) struct CheckboxInputType();
 
 impl SpecificInputType for CheckboxInputType {
@@ -66,7 +67,7 @@ impl SpecificInputType for CheckboxInputType {
             checked: was_checked,
             indeterminate: was_indeterminate,
             checked_radio: None,
-            old_type: InputType::Checkbox,
+            old_type: input.input_type(),
         })
     }
 

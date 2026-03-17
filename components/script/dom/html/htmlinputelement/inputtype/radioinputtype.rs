@@ -25,6 +25,7 @@ use crate::dom::node::{BindContext, Node, ShadowIncluding, UnbindContext};
 use crate::dom::validation::Validatable;
 use crate::dom::validitystate::ValidationFlags;
 
+#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
 pub(crate) struct RadioInputType();
 
 impl SpecificInputType for RadioInputType {
@@ -109,7 +110,7 @@ impl SpecificInputType for RadioInputType {
             checked: was_checked,
             indeterminate: false,
             checked_radio: checked_member.as_deref().map(DomRoot::from_ref),
-            old_type: InputType::Radio,
+            old_type: input.input_type()
         })
     }
 
@@ -237,7 +238,7 @@ pub(crate) fn in_same_group(
         return false;
     }
 
-    if other.input_type() != InputType::Radio ||
+    if matches!(other.input_type(), InputType::Radio(_)) ||
         other.form_owner().as_deref() != owner ||
         other.radio_group_name().as_ref() != group
     {

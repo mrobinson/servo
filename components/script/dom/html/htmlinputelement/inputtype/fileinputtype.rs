@@ -22,6 +22,7 @@ use crate::dom::node::NodeTraits;
 const DEFAULT_FILE_INPUT_VALUE: &str = "No file chosen";
 const DEFAULT_FILE_INPUT_MULTIPLE_VALUE: &str = "No files chosen";
 
+#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
 pub(crate) struct FileInputType();
 
 impl SpecificInputType for FileInputType {

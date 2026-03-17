@@ -7,6 +7,7 @@ use crate::dom::bindings::str::{DOMString, FromInputValueString, ToInputValueStr
 use crate::dom::htmlinputelement::inputtype::SpecificInputType;
 use crate::dom::types::HTMLInputElement;
 
+#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
 pub(crate) struct DateInputType();
 
 impl SpecificInputType for DateInputType {

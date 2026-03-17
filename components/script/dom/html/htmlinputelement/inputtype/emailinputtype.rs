@@ -10,6 +10,7 @@ use crate::dom::bindings::str::{DOMString, FromInputValueString};
 use crate::dom::htmlinputelement::inputtype::SpecificInputType;
 use crate::dom::types::HTMLInputElement;
 
+#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
 pub(crate) struct EmailInputType();
 
 impl SpecificInputType for EmailInputType {

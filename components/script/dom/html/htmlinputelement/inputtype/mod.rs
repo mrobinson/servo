@@ -61,101 +61,188 @@ pub(crate) mod urlinputtype;
 pub(crate) mod weekinputtype;
 
 /// <https://html.spec.whatwg.org/multipage/#attr-input-type>
-#[derive(Clone, Copy, Debug, Default, JSTraceable, PartialEq, MallocSizeOf)]
+#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
 pub(crate) enum InputType {
     /// <https://html.spec.whatwg.org/multipage/#button-state-(type=button)>
-    Button,
+    Button(ButtonInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#checkbox-state-(type=checkbox)>
-    Checkbox,
+    Checkbox(CheckboxInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#color-state-(type=color)>
-    Color,
+    Color(ColorInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#date-state-(type=date)>
-    Date,
+    Date(DateInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#local-date-and-time-state-(type=datetime-local)>
-    DatetimeLocal,
+    DatetimeLocal(DatetimeLocalInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#email-state-(type=email)>
-    Email,
+    Email(EmailInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#file-upload-state-(type=file)>
-    File,
+    File(FileInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#hidden-state-(type=hidden)>
-    Hidden,
+    Hidden(HiddenInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#image-button-state-(type=image)>
-    Image,
+    Image(ImageInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#month-state-(type=month)>
-    Month,
+    Month(MonthInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#number-state-(type=number)>
-    Number,
+    Number(NumberInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#password-state-(type=password)>
-    Password,
+    Password(PasswordInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#radio-button-state-(type=radio)>
-    Radio,
+    Radio(RadioInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#range-state-(type=range)>
-    Range,
+    Range(RangeInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#reset-button-state-(type=reset)>
-    Reset,
+    Reset(ResetInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#text-(type=text)-state-and-search-state-(type=search)>
-    Search,
+    Search(SearchInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#submit-button-state-(type=submit)>
-    Submit,
+    Submit(SubmitInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#telephone-state-(type=tel)>
-    Tel,
+    Tel(TelInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#text-(type=text)-state-and-search-state-(type=search)>
-    #[default]
-    Text,
+    Text(TextInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#time-state-(type=time)>
-    Time,
+    Time(TimeInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#url-state-(type=url)>
-    Url,
+    Url(UrlInputType),
 
     /// <https://html.spec.whatwg.org/multipage/#week-state-(type=week)>
-    Week,
+    Week(WeekInputType),
 }
 
 impl InputType {
+    pub fn button() -> Self {
+        Self::Button(ButtonInputType())
+    }
+
+    pub fn checkbox() -> Self {
+        Self::Checkbox(CheckboxInputType())
+    }
+
+    pub fn color() -> Self {
+        Self::Color(ColorInputType())
+    }
+
+    pub fn date() -> Self {
+        Self::Date(DateInputType())
+    }
+
+    pub fn datetime_local() -> Self {
+        Self::DatetimeLocal(DatetimeLocalInputType())
+    }
+
+    pub fn email() -> Self {
+        Self::Email(EmailInputType())
+    }
+
+    pub fn file() -> Self {
+        Self::File(FileInputType())
+    }
+
+    pub fn hidden() -> Self {
+        Self::Hidden(HiddenInputType())
+    }
+
+    pub fn image() -> Self {
+        Self::Image(ImageInputType())
+    }
+
+    pub fn month() -> Self {
+        Self::Month(MonthInputType())
+    }
+
+    pub fn number() -> Self {
+        Self::Number(NumberInputType())
+    }
+
+    pub fn password() -> Self {
+        Self::Password(PasswordInputType())
+    }
+
+    pub fn radio() -> Self {
+        Self::Radio(RadioInputType())
+    }
+
+    pub fn range() -> Self {
+        Self::Range(RangeInputType())
+    }
+
+    pub fn reset() -> Self {
+        Self::Reset(ResetInputType())
+    }
+
+    pub fn search() -> Self {
+        Self::Search(SearchInputType())
+    }
+
+    pub fn submit() -> Self {
+        Self::Submit(SubmitInputType())
+    }
+
+    pub fn tel() -> Self {
+        Self::Tel(TelInputType())
+    }
+
+    pub fn text() -> Self {
+        Self::Text(TextInputType())
+    }
+
+    pub fn time() -> Self {
+        Self::Time(TimeInputType())
+    }
+
+    pub fn url() -> Self {
+        Self::Url(UrlInputType())
+    }
+
+    pub fn week() -> Self {
+        Self::Week(WeekInputType())
+    }
+
     pub(crate) fn as_specific(&self) -> &dyn SpecificInputType {
-        match *self {
-            Self::Button => &ButtonInputType() as &dyn SpecificInputType,
-            Self::Checkbox => &CheckboxInputType() as &dyn SpecificInputType,
-            Self::Color => &ColorInputType() as &dyn SpecificInputType,
-            Self::Date => &DateInputType() as &dyn SpecificInputType,
-            Self::DatetimeLocal => &DatetimeLocalInputType() as &dyn SpecificInputType,
-            Self::Email => &EmailInputType() as &dyn SpecificInputType,
-            Self::File => &FileInputType() as &dyn SpecificInputType,
-            Self::Hidden => &HiddenInputType() as &dyn SpecificInputType,
-            Self::Image => &ImageInputType() as &dyn SpecificInputType,
-            Self::Month => &MonthInputType() as &dyn SpecificInputType,
-            Self::Number => &NumberInputType() as &dyn SpecificInputType,
-            Self::Password => &PasswordInputType() as &dyn SpecificInputType,
-            Self::Radio => &RadioInputType() as &dyn SpecificInputType,
-            Self::Range => &RangeInputType() as &dyn SpecificInputType,
-            Self::Reset => &ResetInputType() as &dyn SpecificInputType,
-            Self::Search => &SearchInputType() as &dyn SpecificInputType,
-            Self::Submit => &SubmitInputType() as &dyn SpecificInputType,
-            Self::Tel => &TelInputType() as &dyn SpecificInputType,
-            Self::Text => &TextInputType() as &dyn SpecificInputType,
-            Self::Time => &TimeInputType() as &dyn SpecificInputType,
-            Self::Url => &UrlInputType() as &dyn SpecificInputType,
-            Self::Week => &WeekInputType() as &dyn SpecificInputType,
+        match self {
+            Self::Button(input_type) => input_type as &dyn SpecificInputType,
+            Self::Checkbox(input_type) => input_type as &dyn SpecificInputType,
+            Self::Color(input_type) => input_type as &dyn SpecificInputType,
+            Self::Date(input_type) => input_type as &dyn SpecificInputType,
+            Self::DatetimeLocal(input_type) => input_type as &dyn SpecificInputType,
+            Self::Email(input_type) => input_type as &dyn SpecificInputType,
+            Self::File(input_type) => input_type as &dyn SpecificInputType,
+            Self::Hidden(input_type) => input_type as &dyn SpecificInputType,
+            Self::Image(input_type) => input_type as &dyn SpecificInputType,
+            Self::Month(input_type) => input_type as &dyn SpecificInputType,
+            Self::Number(input_type) => input_type as &dyn SpecificInputType,
+            Self::Password(input_type) => input_type as &dyn SpecificInputType,
+            Self::Radio(input_type) => input_type as &dyn SpecificInputType,
+            Self::Range(input_type) => input_type as &dyn SpecificInputType,
+            Self::Reset(input_type) => input_type as &dyn SpecificInputType,
+            Self::Search(input_type) => input_type as &dyn SpecificInputType,
+            Self::Submit(input_type) => input_type as &dyn SpecificInputType,
+            Self::Tel(input_type) => input_type as &dyn SpecificInputType,
+            Self::Text(input_type) => input_type as &dyn SpecificInputType,
+            Self::Time(input_type) => input_type as &dyn SpecificInputType,
+            Self::Url(input_type) => input_type as &dyn SpecificInputType,
+            Self::Week(input_type) => input_type as &dyn SpecificInputType,
         }
     }
 
@@ -166,55 +253,55 @@ impl InputType {
     pub(crate) fn is_textual(&self) -> bool {
         matches!(
             *self,
-            InputType::Date |
-                InputType::DatetimeLocal |
-                InputType::Email |
-                InputType::Hidden |
-                InputType::Month |
-                InputType::Number |
-                InputType::Range |
-                InputType::Search |
-                InputType::Tel |
-                InputType::Text |
-                InputType::Time |
-                InputType::Url |
-                InputType::Week
+            Self::Date(_) |
+                Self::DatetimeLocal(_) |
+                Self::Email(_) |
+                Self::Hidden(_) |
+                Self::Month(_) |
+                Self::Number(_) |
+                Self::Range(_) |
+                Self::Search(_) |
+                Self::Tel(_) |
+                Self::Text(_) |
+                Self::Time(_) |
+                Self::Url(_) |
+                Self::Week(_)
         )
     }
 
     pub(crate) fn is_textual_or_password(&self) -> bool {
-        self.is_textual() || *self == InputType::Password
+        self.is_textual() || matches!(self, Self::Password(_))
     }
 
     /// <https://html.spec.whatwg.org/multipage/#has-a-periodic-domain>
     pub(crate) fn has_periodic_domain(&self) -> bool {
-        *self == InputType::Time
+        matches!(self, Self::Time(_))
     }
 
     pub(crate) fn as_str(&self) -> &str {
         match *self {
-            InputType::Button => "button",
-            InputType::Checkbox => "checkbox",
-            InputType::Color => "color",
-            InputType::Date => "date",
-            InputType::DatetimeLocal => "datetime-local",
-            InputType::Email => "email",
-            InputType::File => "file",
-            InputType::Hidden => "hidden",
-            InputType::Image => "image",
-            InputType::Month => "month",
-            InputType::Number => "number",
-            InputType::Password => "password",
-            InputType::Radio => "radio",
-            InputType::Range => "range",
-            InputType::Reset => "reset",
-            InputType::Search => "search",
-            InputType::Submit => "submit",
-            InputType::Tel => "tel",
-            InputType::Text => "text",
-            InputType::Time => "time",
-            InputType::Url => "url",
-            InputType::Week => "week",
+            InputType::Button(_) => "button",
+            InputType::Checkbox(_) => "checkbox",
+            InputType::Color(_) => "color",
+            InputType::Date(_) => "date",
+            InputType::DatetimeLocal(_) => "datetime-local",
+            InputType::Email(_) => "email",
+            InputType::File(_) => "file",
+            InputType::Hidden(_) => "hidden",
+            InputType::Image(_) => "image",
+            InputType::Month(_) => "month",
+            InputType::Number(_) => "number",
+            InputType::Password(_) => "password",
+            InputType::Radio(_) => "radio",
+            InputType::Range(_) => "range",
+            InputType::Reset(_) => "reset",
+            InputType::Search(_) => "search",
+            InputType::Submit(_) => "submit",
+            InputType::Tel(_) => "tel",
+            InputType::Text(_) => "text",
+            InputType::Time(_) => "time",
+            InputType::Url(_) => "url",
+            InputType::Week(_) => "week",
         }
     }
 }
@@ -224,19 +311,19 @@ impl TryFrom<InputType> for InputMethodType {
 
     fn try_from(input_type: InputType) -> Result<Self, Self::Error> {
         match input_type {
-            InputType::Color => Ok(InputMethodType::Color),
-            InputType::Date => Ok(InputMethodType::Date),
-            InputType::DatetimeLocal => Ok(InputMethodType::DatetimeLocal),
-            InputType::Email => Ok(InputMethodType::Email),
-            InputType::Month => Ok(InputMethodType::Month),
-            InputType::Number => Ok(InputMethodType::Number),
-            InputType::Password => Ok(InputMethodType::Password),
-            InputType::Search => Ok(InputMethodType::Search),
-            InputType::Tel => Ok(InputMethodType::Tel),
-            InputType::Text => Ok(InputMethodType::Text),
-            InputType::Time => Ok(InputMethodType::Time),
-            InputType::Url => Ok(InputMethodType::Url),
-            InputType::Week => Ok(InputMethodType::Week),
+            InputType::Color(_) => Ok(InputMethodType::Color),
+            InputType::Date(_) => Ok(InputMethodType::Date),
+            InputType::DatetimeLocal(_) => Ok(InputMethodType::DatetimeLocal),
+            InputType::Email(_) => Ok(InputMethodType::Email),
+            InputType::Month(_) => Ok(InputMethodType::Month),
+            InputType::Number(_) => Ok(InputMethodType::Number),
+            InputType::Password(_) => Ok(InputMethodType::Password),
+            InputType::Search(_) => Ok(InputMethodType::Search),
+            InputType::Tel(_) => Ok(InputMethodType::Tel),
+            InputType::Text(_) => Ok(InputMethodType::Text),
+            InputType::Time(_) => Ok(InputMethodType::Time),
+            InputType::Url(_) => Ok(InputMethodType::Url),
+            InputType::Week(_) => Ok(InputMethodType::Week),
             _ => Err("Input does not support IME."),
         }
     }
@@ -245,29 +332,29 @@ impl TryFrom<InputType> for InputMethodType {
 impl From<&Atom> for InputType {
     fn from(value: &Atom) -> InputType {
         match value.to_ascii_lowercase() {
-            atom!("button") => InputType::Button,
-            atom!("checkbox") => InputType::Checkbox,
-            atom!("color") => InputType::Color,
-            atom!("date") => InputType::Date,
-            atom!("datetime-local") => InputType::DatetimeLocal,
-            atom!("email") => InputType::Email,
-            atom!("file") => InputType::File,
-            atom!("hidden") => InputType::Hidden,
-            atom!("image") => InputType::Image,
-            atom!("month") => InputType::Month,
-            atom!("number") => InputType::Number,
-            atom!("password") => InputType::Password,
-            atom!("radio") => InputType::Radio,
-            atom!("range") => InputType::Range,
-            atom!("reset") => InputType::Reset,
-            atom!("search") => InputType::Search,
-            atom!("submit") => InputType::Submit,
-            atom!("tel") => InputType::Tel,
-            atom!("text") => InputType::Text,
-            atom!("time") => InputType::Time,
-            atom!("url") => InputType::Url,
-            atom!("week") => InputType::Week,
-            _ => Self::default(),
+            atom!("button") => Self::button(),
+            atom!("checkbox") => Self::checkbox(),
+            atom!("color") => Self::color(),
+            atom!("date") => Self::date(),
+            atom!("datetime-local") => Self::datetime_local(),
+            atom!("email") => Self::email(),
+            atom!("file") => Self::file(),
+            atom!("hidden") => Self::hidden(),
+            atom!("image") => Self::image(),
+            atom!("month") => Self::month(),
+            atom!("number") => Self::number(),
+            atom!("password") => Self::password(),
+            atom!("radio") => Self::radio(),
+            atom!("range") => Self::range(),
+            atom!("reset") => Self::reset(),
+            atom!("search") => Self::search(),
+            atom!("submit") => Self::submit(),
+            atom!("tel") => Self::tel(),
+            atom!("text") => Self::text(),
+            atom!("time") => Self::time(),
+            atom!("url") => Self::url(),
+            atom!("week") => Self::week(),
+            _ => Self::text(),
         }
     }
 }
@@ -348,6 +435,8 @@ pub(crate) trait SpecificInputType {
     fn show_the_picker_if_applicable(&self, _input: &HTMLInputElement) {}
 
     fn select_files(&self, _input: &HTMLInputElement, _test_paths: Option<Vec<DOMString>>) {}
+
+    fn update_shadow_tree(&self, _input: &HTMLInputElement, _can_gc: CanGc) {}
 
     fn attribute_mutated(
         &self,

@@ -13,6 +13,7 @@ use crate::dom::node::NodeTraits;
 
 const DEFAULT_RESET_VALUE: &str = "Reset";
 
+#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
 pub(crate) struct ResetInputType();
 
 impl SpecificInputType for ResetInputType {

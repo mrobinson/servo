@@ -23,6 +23,7 @@ use crate::dom::htmlinputelement::inputtype::{InputType, SpecificInputType};
 
 const PASSWORD_REPLACEMENT_CHAR: char = '●';
 
+#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
 pub(crate) struct TextInputType();
 
 impl SpecificInputType for TextInputType {
@@ -162,7 +163,7 @@ impl TextInputWidgetShadowTree {
         let value = input_element.Value();
         let value_text = match (value.is_empty(), input_element.input_type()) {
             // For a password input, we replace all of the character with its replacement char.
-            (false, InputType::Password) => value
+            (false, InputType::Password(_)) => value
                 .str()
                 .chars()
                 .map(|_| PASSWORD_REPLACEMENT_CHAR)
