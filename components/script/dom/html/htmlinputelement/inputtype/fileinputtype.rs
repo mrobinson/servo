@@ -16,7 +16,7 @@ use crate::dom::document_embedder_controls::ControlElement;
 use crate::dom::event::Event;
 use crate::dom::eventtarget::EventTarget;
 use crate::dom::htmlinputelement::{HTMLInputElement};
-use crate::dom::inputtype::SpecificInputType;
+use crate::dom::htmlinputelement::inputtype::SpecificInputType;
 use crate::dom::node::NodeTraits;
 
 const DEFAULT_FILE_INPUT_VALUE: &str = "No file chosen";

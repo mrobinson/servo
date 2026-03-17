@@ -25,7 +25,7 @@ use crate::dom::document_embedder_controls::ControlElement;
 use crate::dom::element::{AttributeMutation, CustomElementCreationMode, Element, ElementCreator};
 use crate::dom::event::Event;
 use crate::dom::eventtarget::EventTarget;
-use crate::dom::inputtype::SpecificInputType;
+use crate::dom::htmlinputelement::inputtype::SpecificInputType;
 use crate::dom::node::{Node, NodeTraits, UnbindContext};
 use crate::dom::types::HTMLInputElement;
 

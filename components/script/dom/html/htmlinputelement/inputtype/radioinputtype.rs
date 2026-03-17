@@ -20,7 +20,7 @@ use crate::dom::htmlformelement::{FormControl, HTMLFormElement};
 use crate::dom::htmlinputelement::{
     HTMLInputElement, InputActivationState,
 };
-use crate::dom::inputtype::{InputType, SpecificInputType};
+use crate::dom::htmlinputelement::inputtype::{InputType, SpecificInputType};
 use crate::dom::node::{BindContext, Node, ShadowIncluding, UnbindContext};
 use crate::dom::validation::Validatable;
 use crate::dom::validitystate::ValidationFlags;

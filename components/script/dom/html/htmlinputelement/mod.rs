@@ -66,12 +66,10 @@ use crate::dom::html::htmlfieldsetelement::HTMLFieldSetElement;
 use crate::dom::html::htmlformelement::{
     FormControl, FormDatum, FormDatumValue, FormSubmitterElement, HTMLFormElement, SubmittedFrom,
 };
-use crate::dom::inputtype::colorinputtype::ColorInputShadowTree;
-use crate::dom::inputtype::radioinputtype::{
-    broadcast_radio_checked, perform_radio_group_validation,
-};
-use crate::dom::inputtype::textinputtype::TextInputWidgetShadowTree;
-pub(crate) use crate::dom::inputtype::InputType;
+use crate::dom::htmlinputelement::inputtype::colorinputtype::ColorInputShadowTree;
+use crate::dom::htmlinputelement::inputtype::InputType;
+use crate::dom::htmlinputelement::inputtype::radioinputtype::{broadcast_radio_checked, perform_radio_group_validation};
+use crate::dom::htmlinputelement::inputtype::textinputtype::TextInputWidgetShadowTree;
 use crate::dom::keyboardevent::KeyboardEvent;
 use crate::dom::node::{
     BindContext, CloneChildrenFlag, Node, NodeDamage, NodeTraits, ShadowIncluding, UnbindContext,
@@ -86,6 +84,8 @@ use crate::dom::virtualmethods::VirtualMethods;
 use crate::realms::enter_realm;
 use crate::script_runtime::{CanGc, JSContext as SafeJSContext};
 use crate::textinput::{ClipboardEventFlags, IsComposing, KeyReaction, Lines, TextInput};
+
+pub(crate) mod inputtype;
 
 #[derive(Clone, JSTraceable, MallocSizeOf)]
 #[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
@@ -175,7 +175,7 @@ impl InputElementShadowTree {
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) enum ValueMode {
+enum ValueMode {
     /// <https://html.spec.whatwg.org/multipage/#dom-input-value-value>
     Value,
 
@@ -227,11 +227,11 @@ pub(crate) struct HTMLInputElement {
 
 #[derive(JSTraceable)]
 pub(crate) struct InputActivationState {
-    pub(crate) indeterminate: bool,
-    pub(crate) checked: bool,
-    pub(crate) checked_radio: Option<DomRoot<HTMLInputElement>>,
+    indeterminate: bool,
+    checked: bool,
+    checked_radio: Option<DomRoot<HTMLInputElement>>,
     // In case the type changed
-    pub(crate) old_type: InputType,
+    old_type: InputType,
     // was_mutable is implied: pre-activation would return None if it wasn't
 }
 
@@ -440,7 +440,7 @@ impl HTMLInputElement {
     }
 
     /// <https://html.spec.whatwg.org/multipage#concept-input-step>
-    pub(crate) fn allowed_value_step(&self) -> Option<f64> {
+    fn allowed_value_step(&self) -> Option<f64> {
         // Step 1. If the attribute does not apply, then there is no allowed value step.
         // NOTE: The attribute applies iff there is a default step
         let default_step = self.default_step()?;
@@ -473,7 +473,7 @@ impl HTMLInputElement {
     }
 
     /// <https://html.spec.whatwg.org/multipage#concept-input-min>
-    pub(crate) fn minimum(&self) -> Option<f64> {
+    fn minimum(&self) -> Option<f64> {
         self.upcast::<Element>()
             .get_attribute(&local_name!("min"))
             .and_then(|attribute| self.convert_string_to_number(&attribute.value()))
@@ -481,7 +481,7 @@ impl HTMLInputElement {
     }
 
     /// <https://html.spec.whatwg.org/multipage#concept-input-max>
-    pub(crate) fn maximum(&self) -> Option<f64> {
+    fn maximum(&self) -> Option<f64> {
         self.upcast::<Element>()
             .get_attribute(&local_name!("max"))
             .and_then(|attribute| self.convert_string_to_number(&attribute.value()))
@@ -490,7 +490,7 @@ impl HTMLInputElement {
 
     /// when allowed_value_step and minimum both exist, this is the smallest
     /// value >= minimum that lies on an integer step
-    pub(crate) fn stepped_minimum(&self) -> Option<f64> {
+    fn stepped_minimum(&self) -> Option<f64> {
         match (self.minimum(), self.allowed_value_step()) {
             (Some(min), Some(allowed_step)) => {
                 let step_base = self.step_base();
@@ -505,7 +505,7 @@ impl HTMLInputElement {
 
     /// when allowed_value_step and maximum both exist, this is the smallest
     /// value <= maximum that lies on an integer step
-    pub(crate) fn stepped_maximum(&self) -> Option<f64> {
+    fn stepped_maximum(&self) -> Option<f64> {
         match (self.maximum(), self.allowed_value_step()) {
             (Some(max), Some(allowed_step)) => {
                 let step_base = self.step_base();
@@ -535,7 +535,7 @@ impl HTMLInputElement {
     }
 
     /// <https://html.spec.whatwg.org/multipage#concept-input-value-default-range>
-    pub(crate) fn default_range_value(&self) -> f64 {
+    fn default_range_value(&self) -> f64 {
         let min = self.minimum().unwrap_or(0.0);
         let max = self.maximum().unwrap_or(100.0);
         if max < min {
@@ -574,7 +574,7 @@ impl HTMLInputElement {
     }
 
     /// <https://html.spec.whatwg.org/multipage#concept-input-min-zero>
-    pub(crate) fn step_base(&self) -> f64 {
+    fn step_base(&self) -> f64 {
         // Step 1. If the element has a min content attribute, and the result of applying
         // the algorithm to convert a string to a number to the value of the min content attribute
         // is not an error, then return that result.
@@ -991,15 +991,15 @@ impl HTMLInputElement {
         }
     }
 
-    pub(crate) fn textinput_mut(&self) -> RefMut<'_, TextInput<EmbedderClipboardProvider>> {
+    fn textinput_mut(&self) -> RefMut<'_, TextInput<EmbedderClipboardProvider>> {
         self.textinput.borrow_mut()
     }
 
-    pub(crate) fn filelist(&self) -> Option<DomRoot<FileList>> {
+    fn filelist(&self) -> Option<DomRoot<FileList>> {
         self.filelist.get()
     }
 
-    pub(crate) fn placeholder(&self) -> Ref<'_, DOMString> {
+    fn placeholder(&self) -> Ref<'_, DOMString> {
         self.placeholder.borrow()
     }
 }
@@ -1724,7 +1724,7 @@ impl HTMLInputElement {
     }
 
     /// <https://html.spec.whatwg.org/multipage/#radio-button-group>
-    pub(crate) fn radio_group_name(&self) -> Option<Atom> {
+    fn radio_group_name(&self) -> Option<Atom> {
         self.upcast::<Element>()
             .get_name()
             .filter(|name| !name.is_empty())
@@ -1950,7 +1950,7 @@ impl HTMLInputElement {
     }
 
     /// <https://html.spec.whatwg.org/multipage/#show-the-picker,-if-applicable>
-    pub(crate) fn show_the_picker_if_applicable(&self) {
+    fn show_the_picker_if_applicable(&self) {
         // FIXME: Implement most of this algorithm
 
         // Step 2. If element is not mutable, then return.

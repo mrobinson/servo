@@ -1,26 +1,19 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
-use script_bindings::domstring::DOMString;
 use script_bindings::script_runtime::CanGc;
 
 use crate::dom::event::Event;
 use crate::dom::eventtarget::EventTarget;
-use crate::dom::htmlformelement::{FormControl, ResetFrom};
+use crate::dom::htmlformelement::{FormControl, FormSubmitterElement, SubmittedFrom};
 use crate::dom::htmlinputelement::{HTMLInputElement};
-use crate::dom::inputtype::SpecificInputType;
+use crate::dom::htmlinputelement::inputtype::SpecificInputType;
 use crate::dom::node::NodeTraits;
 
-const DEFAULT_RESET_VALUE: &str = "Reset";
+pub(crate) struct ImageInputType();
 
-pub(crate) struct ResetInputType();
-
-impl SpecificInputType for ResetInputType {
-    fn value_for_shadow_dom(&self, _input: &HTMLInputElement) -> DOMString {
-        DEFAULT_RESET_VALUE.into()
-    }
-
-    /// <https://html.spec.whatwg.org/multipage/#reset-button-state-(type=reset):input-activation-behavior>
+impl SpecificInputType for ImageInputType {
+    /// <https://html.spec.whatwg.org/multipage/#image-button-state-(type=image):input-activation-behavior>
     fn activation_behavior(
         &self,
         input: &HTMLInputElement,
@@ -37,8 +30,16 @@ impl SpecificInputType for ResetInputType {
                 return;
             }
 
-            // Step 3: Reset the form owner from the element.
-            form_owner.reset(ResetFrom::NotFromForm, can_gc);
+            // TODO Step 3. If the user activated the control while explicitly selecting a coordinate,
+            // then set the element's selected coordinate to that coordinate.
+
+            // Step 4: Submit the element's form owner from the element with userInvolvement
+            // set to event's user navigation involvement.
+            form_owner.submit(
+                SubmittedFrom::NotFromForm,
+                FormSubmitterElement::Input(input),
+                can_gc,
+            )
         }
     }
 }

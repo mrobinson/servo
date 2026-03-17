@@ -2,8 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use crate::dom::inputtype::SpecificInputType;
+use crate::dom::htmlinputelement::inputtype::SpecificInputType;
 
-pub(crate) struct ButtonInputType();
+pub(crate) struct HiddenInputType();
 
-impl SpecificInputType for ButtonInputType {}
+impl SpecificInputType for HiddenInputType {}

@@ -11,7 +11,7 @@ use crate::dom::eventtarget::EventTarget;
 use crate::dom::htmlinputelement::{
     HTMLInputElement, InputActivationState,
 };
-use crate::dom::inputtype::{InputType, SpecificInputType};
+use crate::dom::htmlinputelement::inputtype::{InputType, SpecificInputType};
 use crate::dom::node::Node;
 
 pub(crate) struct CheckboxInputType();

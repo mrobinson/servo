@@ -4,7 +4,7 @@
 use script_bindings::domstring::parse_floating_point_number;
 
 use crate::dom::bindings::str::DOMString;
-use crate::dom::inputtype::SpecificInputType;
+use crate::dom::htmlinputelement::inputtype::SpecificInputType;
 use crate::dom::types::HTMLInputElement;
 
 pub(crate) struct NumberInputType();

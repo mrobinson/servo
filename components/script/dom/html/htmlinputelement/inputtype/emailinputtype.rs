@@ -7,7 +7,7 @@ use script_bindings::codegen::GenericBindings::HTMLInputElementBinding::HTMLInpu
 use style::str::split_commas;
 
 use crate::dom::bindings::str::{DOMString, FromInputValueString};
-use crate::dom::inputtype::SpecificInputType;
+use crate::dom::htmlinputelement::inputtype::SpecificInputType;
 use crate::dom::types::HTMLInputElement;
 
 pub(crate) struct EmailInputType();

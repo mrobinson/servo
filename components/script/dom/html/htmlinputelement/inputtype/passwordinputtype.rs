@@ -3,12 +3,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use crate::dom::bindings::str::DOMString;
-use crate::dom::inputtype::SpecificInputType;
+use crate::dom::htmlinputelement::inputtype::SpecificInputType;
 use crate::dom::types::HTMLInputElement;
 
-pub(crate) struct TelInputType();
+pub(crate) struct PasswordInputType();
 
-impl SpecificInputType for TelInputType {
+impl SpecificInputType for PasswordInputType {
     fn sanitize_value(&self, _input: &HTMLInputElement, value: &mut DOMString) {
         value.strip_newlines();
     }

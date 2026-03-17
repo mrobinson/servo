@@ -4,7 +4,7 @@
 use time::{OffsetDateTime, Time};
 
 use crate::dom::bindings::str::{DOMString, FromInputValueString, ToInputValueString};
-use crate::dom::inputtype::SpecificInputType;
+use crate::dom::htmlinputelement::inputtype::SpecificInputType;
 use crate::dom::types::HTMLInputElement;
 
 pub(crate) struct TimeInputType();

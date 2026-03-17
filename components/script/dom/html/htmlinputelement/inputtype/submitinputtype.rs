@@ -8,7 +8,7 @@ use crate::dom::event::Event;
 use crate::dom::eventtarget::EventTarget;
 use crate::dom::htmlformelement::{FormControl, FormSubmitterElement, SubmittedFrom};
 use crate::dom::htmlinputelement::{HTMLInputElement};
-use crate::dom::inputtype::SpecificInputType;
+use crate::dom::htmlinputelement::inputtype::SpecificInputType;
 use crate::dom::node::NodeTraits;
 
 const DEFAULT_SUBMIT_VALUE: &str = "Submit";
