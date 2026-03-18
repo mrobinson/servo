@@ -808,7 +808,7 @@ impl HTMLElement {
         match self.upcast::<Node>().type_id() {
             NodeTypeId::Element(ElementTypeId::HTMLElement(type_id)) => match type_id {
                 HTMLElementTypeId::HTMLInputElement => !matches!(
-                    self.downcast::<HTMLInputElement>().unwrap().input_type(),
+                    *self.downcast::<HTMLInputElement>().unwrap().input_type(),
                     InputType::Hidden(_)
                 ),
                 HTMLElementTypeId::HTMLButtonElement |
@@ -936,7 +936,7 @@ impl HTMLElement {
         }
 
         if let Some(input) = self.downcast::<HTMLInputElement>() {
-            if matches!(input.input_type(), InputType::Tel(_)) {
+            if matches!(*input.input_type(), InputType::Tel(_)) {
                 return Some("ltr".to_owned());
             }
         }

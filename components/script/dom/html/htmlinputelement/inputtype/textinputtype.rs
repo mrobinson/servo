@@ -162,7 +162,8 @@ impl TextInputWidgetShadowTree {
         // TODO: Could append `<br>` element to prevent collapses and avoid this hack, but we would
         //       need to fix the rendering of caret beforehand.
         let value = input_element.Value();
-        let value_text = match (value.is_empty(), input_element.input_type()) {
+        let input_type = &*input_element.input_type();
+        let value_text = match (value.is_empty(), input_type) {
             // For a password input, we replace all of the character with its replacement char.
             (false, InputType::Password(_)) => value
                 .str()

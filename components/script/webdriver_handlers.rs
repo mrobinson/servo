@@ -1266,7 +1266,7 @@ pub(crate) fn handle_will_send_keys(
 
     // Step 6: Let file be true if element is input element
     // in the file upload state, or false otherwise
-    let is_file_input = input_element.is_some_and(|e| matches!(e.input_type(), InputType::File(_)));
+    let is_file_input = input_element.is_some_and(|e| matches!(*e.input_type(), InputType::File(_)));
 
     // Step 7. If file is false or the session's strict file interactability
     if !is_file_input || strict_file_interactability {
@@ -1785,7 +1785,7 @@ fn element_is_mutable_form_control(element: &Element) -> bool {
     if let Some(input_element) = element.downcast::<HTMLInputElement>() {
         input_element.is_mutable() &&
             matches!(
-                input_element.input_type(),
+                *input_element.input_type(),
                 InputType::Text(_) |
                     InputType::Search(_) |
                     InputType::Url(_) |
@@ -1953,7 +1953,7 @@ pub(crate) fn handle_element_click(
                 // Step 4. If the element is an input element in the file upload state
                 // return error with error code invalid argument.
                 if let Some(input_element) = element.downcast::<HTMLInputElement>() {
-                    if matches!(input_element.input_type(), InputType::File(_)) {
+                    if matches!(*input_element.input_type(), InputType::File(_)) {
                         return Err(ErrorStatus::InvalidArgument);
                     }
                 }

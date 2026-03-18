@@ -64,7 +64,7 @@ pub(crate) mod urlinputtype;
 pub(crate) mod weekinputtype;
 
 /// <https://html.spec.whatwg.org/multipage/#attr-input-type>
-#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
+#[derive(JSTraceable, MallocSizeOf, PartialEq)]
 pub(crate) enum InputType {
     /// <https://html.spec.whatwg.org/multipage/#button-state-(type=button)>
     Button(ButtonInputType),
@@ -313,6 +313,29 @@ impl TryFrom<InputType> for InputMethodType {
     type Error = &'static str;
 
     fn try_from(input_type: InputType) -> Result<Self, Self::Error> {
+        match input_type {
+            InputType::Color(_) => Ok(InputMethodType::Color),
+            InputType::Date(_) => Ok(InputMethodType::Date),
+            InputType::DatetimeLocal(_) => Ok(InputMethodType::DatetimeLocal),
+            InputType::Email(_) => Ok(InputMethodType::Email),
+            InputType::Month(_) => Ok(InputMethodType::Month),
+            InputType::Number(_) => Ok(InputMethodType::Number),
+            InputType::Password(_) => Ok(InputMethodType::Password),
+            InputType::Search(_) => Ok(InputMethodType::Search),
+            InputType::Tel(_) => Ok(InputMethodType::Tel),
+            InputType::Text(_) => Ok(InputMethodType::Text),
+            InputType::Time(_) => Ok(InputMethodType::Time),
+            InputType::Url(_) => Ok(InputMethodType::Url),
+            InputType::Week(_) => Ok(InputMethodType::Week),
+            _ => Err("Input does not support IME."),
+        }
+    }
+}
+
+impl TryFrom<&InputType> for InputMethodType {
+    type Error = &'static str;
+
+    fn try_from(input_type: &InputType) -> Result<Self, Self::Error> {
         match input_type {
             InputType::Color(_) => Ok(InputMethodType::Color),
             InputType::Date(_) => Ok(InputMethodType::Date),

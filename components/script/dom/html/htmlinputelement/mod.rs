@@ -137,7 +137,7 @@ impl InputElementShadowTree {
             .unwrap_or_else(|| element.attach_ua_shadow_root(cx, true));
         let shadow_root = shadow_root.upcast();
 
-        if matches!(input_element.input_type(), InputType::Color(_)) {
+        if matches!(*input_element.input_type(), InputType::Color(_)) {
             return Self::ColorInput(ColorInputShadowTree::new(cx, shadow_root));
         }
         if input_element.renders_as_text_input_widget() {
@@ -147,7 +147,7 @@ impl InputElementShadowTree {
     }
 
     fn is_valid_for_element(&self, input_element: &HTMLInputElement) -> bool {
-        if matches!(input_element.input_type(), InputType::Color(_)) {
+        if matches!(*input_element.input_type(), InputType::Color(_)) {
             return matches!(self, InputElementShadowTree::ColorInput(_));
         }
         if input_element.renders_as_text_input_widget() {
@@ -197,7 +197,7 @@ enum StepDirection {
 #[dom_struct]
 pub(crate) struct HTMLInputElement {
     htmlelement: HTMLElement,
-    input_type: Cell<InputType>,
+    input_type: DomRefCell<InputType>,
 
     /// <https://html.spec.whatwg.org/multipage/#concept-input-checked-dirty-flag>
     checked_changed: Cell<bool>,
@@ -257,7 +257,7 @@ impl HTMLInputElement {
                 prefix,
                 document,
             ),
-            input_type: Cell::new(InputType::text()),
+            input_type: DomRefCell::new(InputType::text()),
             placeholder: DomRefCell::new(DOMString::new()),
             checked_changed: Cell::new(false),
             maxlength: Cell::new(DEFAULT_MAX_LENGTH),
@@ -300,7 +300,7 @@ impl HTMLInputElement {
     }
 
     pub(crate) fn auto_directionality(&self) -> Option<String> {
-        match self.input_type() {
+        match *self.input_type() {
             InputType::Text(_) | InputType::Search(_) | InputType::Url(_) | InputType::Email(_) => {
                 let value: String = self.Value().to_string();
                 Some(HTMLInputElement::directionality_from_value(&value))
@@ -332,7 +332,7 @@ impl HTMLInputElement {
     // https://html.spec.whatwg.org/multipage/#dom-input-value
     /// <https://html.spec.whatwg.org/multipage/#concept-input-apply>
     fn value_mode(&self) -> ValueMode {
-        match self.input_type() {
+        match *self.input_type() {
             InputType::Submit(_) |
             InputType::Reset(_) |
             InputType::Button(_) |
@@ -361,14 +361,14 @@ impl HTMLInputElement {
     }
 
     #[inline]
-    pub(crate) fn input_type(&self) -> InputType {
-        self.input_type.get()
+    pub(crate) fn input_type(&self) -> Ref<'_, InputType> {
+        self.input_type.borrow()
     }
 
     /// <https://w3c.github.io/webdriver/#dfn-non-typeable-form-control>
     pub(crate) fn is_nontypeable(&self) -> bool {
         matches!(
-            self.input_type(),
+            *self.input_type(),
             InputType::Button(_) |
                 InputType::Checkbox(_) |
                 InputType::Color(_) |
@@ -384,13 +384,12 @@ impl HTMLInputElement {
 
     #[inline]
     pub(crate) fn is_submit_button(&self) -> bool {
-        let input_type = self.input_type.get();
-        matches!(input_type, InputType::Submit(_) | InputType::Image(_))
+        matches!(*self.input_type(), InputType::Submit(_) | InputType::Image(_))
     }
 
     fn does_minmaxlength_apply(&self) -> bool {
         matches!(
-            self.input_type(),
+            *self.input_type(),
             InputType::Text(_) |
                 InputType::Search(_) |
                 InputType::Url(_) |
@@ -402,7 +401,7 @@ impl HTMLInputElement {
 
     fn does_pattern_apply(&self) -> bool {
         matches!(
-            self.input_type(),
+            *self.input_type(),
             InputType::Text(_) |
                 InputType::Search(_) |
                 InputType::Url(_) |
@@ -413,14 +412,14 @@ impl HTMLInputElement {
     }
 
     fn does_multiple_apply(&self) -> bool {
-        matches!(self.input_type(), InputType::Email(_))
+        matches!(*self.input_type(), InputType::Email(_))
     }
 
     // valueAsNumber, step, min, and max all share the same set of
     // input types they apply to
     fn does_value_as_number_apply(&self) -> bool {
         matches!(
-            self.input_type(),
+            *self.input_type(),
             InputType::Date(_) |
                 InputType::Month(_) |
                 InputType::Week(_) |
@@ -433,7 +432,7 @@ impl HTMLInputElement {
 
     fn does_value_as_date_apply(&self) -> bool {
         matches!(
-            self.input_type(),
+            *self.input_type(),
             InputType::Date(_) | InputType::Month(_) | InputType::Week(_) | InputType::Time(_)
         )
     }
@@ -519,7 +518,7 @@ impl HTMLInputElement {
 
     /// <https://html.spec.whatwg.org/multipage#concept-input-min-default>
     fn default_minimum(&self) -> Option<f64> {
-        match self.input_type() {
+        match *self.input_type() {
             InputType::Range(_) => Some(0.0),
             _ => None,
         }
@@ -527,7 +526,7 @@ impl HTMLInputElement {
 
     /// <https://html.spec.whatwg.org/multipage#concept-input-max-default>
     fn default_maximum(&self) -> Option<f64> {
-        match self.input_type() {
+        match *self.input_type() {
             InputType::Range(_) => Some(100.0),
             _ => None,
         }
@@ -546,7 +545,7 @@ impl HTMLInputElement {
 
     /// <https://html.spec.whatwg.org/multipage#concept-input-step-default>
     fn default_step(&self) -> Option<f64> {
-        match self.input_type() {
+        match *self.input_type() {
             InputType::Date(_) => Some(1.0),
             InputType::Month(_) => Some(1.0),
             InputType::Week(_) => Some(1.0),
@@ -560,7 +559,7 @@ impl HTMLInputElement {
 
     /// <https://html.spec.whatwg.org/multipage#concept-input-step-scale>
     fn step_scale_factor(&self) -> f64 {
-        match self.input_type() {
+        match *self.input_type() {
             InputType::Date(_) => 86400000.0,
             InputType::Month(_) => 1.0,
             InputType::Week(_) => 604800000.0,
@@ -607,7 +606,7 @@ impl HTMLInputElement {
 
     /// <https://html.spec.whatwg.org/multipage#concept-input-step-default-base>
     fn default_step_base(&self) -> Option<f64> {
-        match self.input_type() {
+        match *self.input_type() {
             InputType::Week(_) => Some(-259200000.0),
             _ => None,
         }
@@ -917,7 +916,7 @@ impl HTMLInputElement {
     /// and `email`, but the others do not yet have a custom shadow DOM implementation.
     pub(crate) fn renders_as_text_input_widget(&self) -> bool {
         matches!(
-            self.input_type(),
+            *self.input_type(),
             InputType::Date(_) |
                 InputType::DatetimeLocal(_) |
                 InputType::Email(_) |
@@ -936,7 +935,7 @@ impl HTMLInputElement {
 
     fn may_have_embedder_control(&self) -> bool {
         let el = self.upcast::<Element>();
-        matches!(self.input_type(), InputType::Color(_)) && !el.disabled_state()
+        matches!(*self.input_type(), InputType::Color(_)) && !el.disabled_state()
     }
 
     fn handle_key_reaction(&self, action: KeyReaction, event: &Event, can_gc: CanGc) {
@@ -969,7 +968,7 @@ impl HTMLInputElement {
 
     /// Return a string that represents the contents of the element in its displayed shadow DOM.
     fn value_for_shadow_dom(&self) -> DOMString {
-        let input_type = self.input_type();
+        let input_type = &*self.input_type();
         match input_type {
             InputType::Checkbox(_) |
             InputType::Radio(_) |
@@ -1027,7 +1026,7 @@ impl TextControlElement for HTMLInputElement {
     /// <https://html.spec.whatwg.org/multipage/#concept-input-apply>
     fn selection_api_applies(&self) -> bool {
         matches!(
-            self.input_type(),
+            *self.input_type(),
             InputType::Text(_) |
                 InputType::Search(_) |
                 InputType::Url(_) |
@@ -1497,7 +1496,7 @@ impl HTMLInputElementMethods<crate::DomTypeHolder> for HTMLInputElement {
     // Different from make_labels_getter because this one
     // conditionally returns null.
     fn GetLabels(&self, can_gc: CanGc) -> Option<DomRoot<NodeList>> {
-        if matches!(self.input_type(), InputType::Hidden(_)) {
+        if matches!(*self.input_type(), InputType::Hidden(_)) {
             None
         } else {
             Some(self.labels_node_list.or_init(|| {
@@ -1647,7 +1646,7 @@ impl HTMLInputElement {
             _ => false,
         };
 
-        match self.input_type() {
+        match *self.input_type() {
             // Step 5.1: it's a button but it is not submitter.
             InputType::Submit(_) | InputType::Button(_) | InputType::Reset(_) if !is_submitter => {
                 return vec![];
@@ -1737,7 +1736,7 @@ impl HTMLInputElement {
             self.checked_changed.set(true);
         }
 
-        if matches!(self.input_type(), InputType::Radio(_)) && checked {
+        if matches!(*self.input_type(), InputType::Radio(_)) && checked {
             broadcast_radio_checked(self, self.radio_group_name().as_ref(), can_gc);
         }
 
@@ -1768,7 +1767,7 @@ impl HTMLInputElement {
         self.sanitize_value(&mut value);
         self.textinput.borrow_mut().set_content(value);
 
-        let input_type = self.input_type.get();
+        let input_type = &*self.input_type();
         if matches!(input_type, InputType::Radio(_) | InputType::Checkbox(_)) {
             self.update_checked_state(self.DefaultChecked(), false, can_gc);
             self.checked_changed.set(false);
@@ -1867,7 +1866,7 @@ impl HTMLInputElement {
         let submit_button = node
             .traverse_preorder(ShadowIncluding::No)
             .filter_map(DomRoot::downcast::<HTMLInputElement>)
-            .filter(|input| matches!(input.input_type(), InputType::Submit(_)))
+            .filter(|input| matches!(*input.input_type(), InputType::Submit(_)))
             .find(|r| r.form_owner() == owner);
         match submit_button {
             Some(ref button) => {
@@ -1886,7 +1885,7 @@ impl HTMLInputElement {
                     .filter(|input| {
                         input.form_owner() == owner &&
                             matches!(
-                                input.input_type(),
+                                *input.input_type(),
                                 InputType::Text(_) |
                                     InputType::Search(_) |
                                     InputType::Url(_) |
@@ -1930,7 +1929,7 @@ impl HTMLInputElement {
     }
 
     fn update_related_validity_states(&self, can_gc: CanGc) {
-        match self.input_type() {
+        match *self.input_type() {
             InputType::Radio(_) => {
                 perform_radio_group_validation(self, self.radio_group_name().as_ref(), can_gc)
             },
@@ -2042,7 +2041,8 @@ impl HTMLInputElement {
                 .embedder_controls()
                 .hide_embedder_control(self.upcast());
         } else if *event_type == *"focus" {
-            let Ok(input_method_type) = self.input_type().try_into() else {
+            let input_type = &*self.input_type();
+            let Ok(input_method_type) = input_type.try_into() else {
                 return;
             };
 
@@ -2148,8 +2148,6 @@ impl VirtualMethods for HTMLInputElement {
                         let (old_value_mode, old_idl_value) = (self.value_mode(), self.Value());
                         let previously_selectable = self.selection_api_applies();
 
-                        self.input_type.set(new_type);
-
                         if new_type.is_textual() {
                             let read_write = !(self.ReadOnly() || el.disabled_state());
                             el.set_read_write_state(read_write);
@@ -2162,6 +2160,8 @@ impl VirtualMethods for HTMLInputElement {
                             let filelist = FileList::new(&window, vec![], CanGc::from_cx(cx));
                             new_type.as_specific().set_files(self, &filelist)
                         }
+
+                        *self.input_type.borrow_mut() = new_type;
 
                         let new_value_mode = self.value_mode();
                         match (&old_value_mode, old_idl_value.is_empty(), new_value_mode) {
@@ -2219,7 +2219,7 @@ impl VirtualMethods for HTMLInputElement {
                         self.input_type()
                             .as_specific()
                             .signal_type_change(self, CanGc::from_cx(cx));
-                        self.input_type.set(InputType::text());
+                        *self.input_type.borrow_mut() = InputType::text();
                         let el = self.upcast::<Element>();
 
                         let read_write = !(self.ReadOnly() || el.disabled_state());
@@ -2507,7 +2507,7 @@ impl Validatable for HTMLInputElement {
         // https://html.spec.whatwg.org/multipage/#enabling-and-disabling-form-controls%3A-the-disabled-attribute%3Abarred-from-constraint-validation
         // https://html.spec.whatwg.org/multipage/#the-readonly-attribute%3Abarred-from-constraint-validation
         // https://html.spec.whatwg.org/multipage/#the-datalist-element%3Abarred-from-constraint-validation
-        match self.input_type() {
+        match *self.input_type() {
             InputType::Hidden(_) | InputType::Button(_) | InputType::Reset(_) => false,
             _ => {
                 !(self.upcast::<Element>().disabled_state() ||
@@ -2571,7 +2571,7 @@ impl Activatable for HTMLInputElement {
     }
 
     fn is_instance_activatable(&self) -> bool {
-        match self.input_type() {
+        match *self.input_type() {
             // https://html.spec.whatwg.org/multipage/#submit-button-state-(type=submit):input-activation-behavior
             // https://html.spec.whatwg.org/multipage/#reset-button-state-(type=reset):input-activation-behavior
             // https://html.spec.whatwg.org/multipage/#file-upload-state-(type=file):input-activation-behavior
@@ -2615,7 +2615,7 @@ impl Activatable for HTMLInputElement {
         let ty = self.input_type();
         let cache = match cache {
             Some(cache) => {
-                if cache.old_type != ty {
+                if cache.old_type != *ty {
                     // Type changed, abandon ship
                     // https://www.w3.org/Bugs/Public/show_bug.cgi?id=27414
                     return;

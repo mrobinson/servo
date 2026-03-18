@@ -8,7 +8,7 @@ use script_bindings::script_runtime::CanGc;
 use crate::dom::bindings::inheritance::Castable;
 use crate::dom::event::{Event, EventBubbles, EventCancelable, EventComposed};
 use crate::dom::eventtarget::EventTarget;
-use crate::dom::htmlinputelement::inputtype::SpecificInputType;
+use crate::dom::htmlinputelement::inputtype::{InputType, SpecificInputType};
 use crate::dom::htmlinputelement::{HTMLInputElement, InputActivationState};
 use crate::dom::node::Node;
 
@@ -65,7 +65,7 @@ impl SpecificInputType for CheckboxInputType {
             checked: was_checked,
             indeterminate: was_indeterminate,
             checked_radio: None,
-            old_type: input.input_type(),
+            old_type: InputType::checkbox(),
         })
     }
 

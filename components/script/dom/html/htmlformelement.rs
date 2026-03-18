@@ -169,7 +169,7 @@ impl HTMLFormElement {
                     {
                         if let Some(inp) = child.downcast::<HTMLInputElement>() {
                             // input, only return it if it's not image-button state
-                            return !matches!(inp.input_type(), InputType::Image(_));
+                            return !matches!(*inp.input_type(), InputType::Image(_));
                         } else {
                             // control, but not an input
                             return true;
@@ -383,7 +383,7 @@ impl HTMLFormElementMethods<crate::DomTypeHolder> for HTMLFormElement {
                         },
                         HTMLElementTypeId::HTMLInputElement => {
                             let input_elem = elem.downcast::<HTMLInputElement>().unwrap();
-                            if matches!(input_elem.input_type(), InputType::Image(_)) {
+                            if matches!(*input_elem.input_type(), InputType::Image(_)) {
                                 return false;
                             }
                             input_elem.form_owner()
@@ -1288,7 +1288,7 @@ impl HTMLFormElement {
                 .downcast::<HTMLInputElement>()
                 .is_some_and(|input| {
                     matches!(
-                        input.input_type(),
+                        *input.input_type(),
                         InputType::Text(_) | InputType::Search(_)
                     )
                 });

@@ -91,7 +91,7 @@ impl RadioNodeListMethods<crate::DomTypeHolder> for RadioNodeList {
             .find_map(|node| {
                 // Step 1
                 node.downcast::<HTMLInputElement>().and_then(|input| {
-                    if matches!(input.input_type(), InputType::Radio(_)) && input.Checked() {
+                    if matches!(*input.input_type(), InputType::Radio(_)) && input.Checked() {
                         // Step 3-4
                         let value = input.Value();
                         Some(if value.is_empty() {
@@ -113,7 +113,7 @@ impl RadioNodeListMethods<crate::DomTypeHolder> for RadioNodeList {
         for node in self.upcast::<NodeList>().iter() {
             // Step 1
             if let Some(input) = node.downcast::<HTMLInputElement>() {
-                match input.input_type() {
+                match *input.input_type() {
                     InputType::Radio(_) if value == *"on" => {
                         // Step 2
                         let val = input.Value();

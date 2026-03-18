@@ -108,7 +108,7 @@ impl SpecificInputType for RadioInputType {
             checked: was_checked,
             indeterminate: false,
             checked_radio: checked_member.as_deref().map(DomRoot::from_ref),
-            old_type: input.input_type(),
+            old_type: InputType::radio(),
         })
     }
 
@@ -236,7 +236,7 @@ pub(crate) fn in_same_group(
         return false;
     }
 
-    if matches!(other.input_type(), InputType::Radio(_)) ||
+    if matches!(*other.input_type(), InputType::Radio(_)) ||
         other.form_owner().as_deref() != owner ||
         other.radio_group_name().as_ref() != group
     {
