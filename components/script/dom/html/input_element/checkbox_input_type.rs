@@ -3,13 +3,13 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 use script_bindings::codegen::GenericBindings::HTMLInputElementBinding::HTMLInputElementMethods;
 use script_bindings::domstring::DOMString;
+use script_bindings::inheritance::Castable;
 use script_bindings::script_runtime::CanGc;
 
-use crate::dom::bindings::inheritance::Castable;
 use crate::dom::event::{Event, EventBubbles, EventCancelable, EventComposed};
 use crate::dom::eventtarget::EventTarget;
-use crate::dom::htmlinputelement::inputtype::{InputType, SpecificInputType};
-use crate::dom::htmlinputelement::{HTMLInputElement, InputActivationState};
+use crate::dom::input_element::input_type::{InputType, SpecificInputType};
+use crate::dom::input_element::{HTMLInputElement, InputActivationState};
 use crate::dom::node::Node;
 
 #[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]

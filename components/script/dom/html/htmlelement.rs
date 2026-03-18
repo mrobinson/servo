@@ -52,11 +52,11 @@ use crate::dom::html::htmldetailselement::HTMLDetailsElement;
 use crate::dom::html::htmlformelement::{FormControl, HTMLFormElement};
 use crate::dom::html::htmlframesetelement::HTMLFrameSetElement;
 use crate::dom::html::htmlhtmlelement::HTMLHtmlElement;
-use crate::dom::html::htmlinputelement::HTMLInputElement;
 use crate::dom::html::htmllabelelement::HTMLLabelElement;
 use crate::dom::html::htmltextareaelement::HTMLTextAreaElement;
+use crate::dom::html::input_element::HTMLInputElement;
 use crate::dom::htmlformelement::FormControlElementHelpers;
-use crate::dom::htmlinputelement::inputtype::InputType;
+use crate::dom::input_element::input_type::InputType;
 use crate::dom::medialist::MediaList;
 use crate::dom::node::{
     BindContext, MoveContext, Node, NodeTraits, ShadowIncluding, UnbindContext,

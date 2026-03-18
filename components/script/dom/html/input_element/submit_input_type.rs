@@ -6,22 +6,22 @@ use script_bindings::script_runtime::CanGc;
 
 use crate::dom::event::Event;
 use crate::dom::eventtarget::EventTarget;
-use crate::dom::htmlformelement::{FormControl, ResetFrom};
-use crate::dom::htmlinputelement::HTMLInputElement;
-use crate::dom::htmlinputelement::inputtype::SpecificInputType;
+use crate::dom::htmlformelement::{FormControl, FormSubmitterElement, SubmittedFrom};
+use crate::dom::input_element::HTMLInputElement;
+use crate::dom::input_element::input_type::SpecificInputType;
 use crate::dom::node::NodeTraits;
 
-const DEFAULT_RESET_VALUE: &str = "Reset";
+const DEFAULT_SUBMIT_VALUE: &str = "Submit";
 
 #[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
-pub(crate) struct ResetInputType();
+pub(crate) struct SubmitInputType();
 
-impl SpecificInputType for ResetInputType {
+impl SpecificInputType for SubmitInputType {
     fn value_for_shadow_dom(&self, _input: &HTMLInputElement) -> DOMString {
-        DEFAULT_RESET_VALUE.into()
+        DEFAULT_SUBMIT_VALUE.into()
     }
 
-    /// <https://html.spec.whatwg.org/multipage/#reset-button-state-(type=reset):input-activation-behavior>
+    /// <https://html.spec.whatwg.org/multipage/#submit-button-state-(type=submit):input-activation-behavior>
     fn activation_behavior(
         &self,
         input: &HTMLInputElement,
@@ -38,8 +38,13 @@ impl SpecificInputType for ResetInputType {
                 return;
             }
 
-            // Step 3: Reset the form owner from the element.
-            form_owner.reset(ResetFrom::NotFromForm, can_gc);
+            // Step 3: Submit the element's form owner from the element with userInvolvement
+            // set to event's user navigation involvement.
+            form_owner.submit(
+                SubmittedFrom::NotFromForm,
+                FormSubmitterElement::Input(input),
+                can_gc,
+            )
         }
     }
 }

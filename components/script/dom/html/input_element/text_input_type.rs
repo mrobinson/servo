@@ -18,9 +18,9 @@ use crate::dom::bindings::str::DOMString;
 use crate::dom::characterdata::CharacterData;
 use crate::dom::document::Document;
 use crate::dom::element::{CustomElementCreationMode, Element, ElementCreator};
-use crate::dom::htmlinputelement::inputtype::{InputType, SpecificInputType};
+use crate::dom::input_element::HTMLInputElement;
+use crate::dom::input_element::input_type::{InputType, SpecificInputType};
 use crate::dom::node::{Node, NodeTraits};
-use crate::dom::types::HTMLInputElement;
 
 const PASSWORD_REPLACEMENT_CHAR: char = '●';
 

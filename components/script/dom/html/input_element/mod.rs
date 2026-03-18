@@ -12,10 +12,10 @@ use dom_struct::dom_struct;
 use embedder_traits::{EmbedderControlRequest, InputMethodRequest, RgbColor, SelectedFile};
 use encoding_rs::Encoding;
 use fonts::{ByteIndex, TextByteRange};
-use html5ever::{local_name, LocalName, Prefix};
+use html5ever::{LocalName, Prefix, local_name};
 use js::context::JSContext;
 use js::jsapi::{
-    ClippedTime, DateGetMsecSinceEpoch, Handle, JSObject, JS_ClearPendingException, NewDateObject,
+    ClippedTime, DateGetMsecSinceEpoch, Handle, JS_ClearPendingException, JSObject, NewDateObject,
     NewUCRegExpObject, ObjectIsDate, RegExpFlag_UnicodeSets, RegExpFlags,
 };
 use js::jsval::UndefinedValue;
@@ -30,7 +30,7 @@ use style::str::split_commas;
 use stylo_atoms::Atom;
 use stylo_dom::ElementState;
 use time::OffsetDateTime;
-use unicode_bidi::{bidi_class, BidiClass};
+use unicode_bidi::{BidiClass, bidi_class};
 use webdriver::error::ErrorStatus;
 
 use crate::clipboard_provider::EmbedderClipboardProvider;
@@ -62,12 +62,12 @@ use crate::dom::html::htmlfieldsetelement::HTMLFieldSetElement;
 use crate::dom::html::htmlformelement::{
     FormControl, FormDatum, FormDatumValue, FormSubmitterElement, HTMLFormElement, SubmittedFrom,
 };
-use crate::dom::htmlinputelement::inputtype::colorinputtype::ColorInputShadowTree;
-use crate::dom::htmlinputelement::inputtype::radioinputtype::{
+use crate::dom::input_element::color_input_type::ColorInputShadowTree;
+use crate::dom::input_element::input_type::InputType;
+use crate::dom::input_element::radio_input_type::{
     broadcast_radio_checked, perform_radio_group_validation,
 };
-use crate::dom::htmlinputelement::inputtype::textinputtype::TextInputWidgetShadowTree;
-use crate::dom::htmlinputelement::inputtype::InputType;
+use crate::dom::input_element::text_input_type::TextInputWidgetShadowTree;
 use crate::dom::keyboardevent::KeyboardEvent;
 use crate::dom::node::{
     BindContext, CloneChildrenFlag, Node, NodeDamage, NodeTraits, ShadowIncluding, UnbindContext,
@@ -76,14 +76,36 @@ use crate::dom::nodelist::NodeList;
 use crate::dom::text::Text;
 use crate::dom::textcontrol::{TextControlElement, TextControlSelection};
 use crate::dom::types::{CharacterData, FocusEvent, MouseEvent};
-use crate::dom::validation::{is_barred_by_datalist_ancestor, Validatable};
+use crate::dom::validation::{Validatable, is_barred_by_datalist_ancestor};
 use crate::dom::validitystate::{ValidationFlags, ValidityState};
 use crate::dom::virtualmethods::VirtualMethods;
 use crate::realms::enter_realm;
 use crate::script_runtime::{CanGc, JSContext as SafeJSContext};
 use crate::textinput::{ClipboardEventFlags, IsComposing, KeyReaction, Lines, TextInput};
 
-pub(crate) mod inputtype;
+pub(crate) mod button_input_type;
+pub(crate) mod checkbox_input_type;
+pub(crate) mod color_input_type;
+pub(crate) mod date_input_type;
+pub(crate) mod datetime_local_input_type;
+pub(crate) mod email_input_type;
+pub(crate) mod file_input_type;
+pub(crate) mod hidden_input_type;
+pub(crate) mod image_input_type;
+pub(crate) mod input_type;
+pub(crate) mod month_input_type;
+pub(crate) mod number_input_type;
+pub(crate) mod password_input_type;
+pub(crate) mod radio_input_type;
+pub(crate) mod range_input_type;
+pub(crate) mod reset_input_type;
+pub(crate) mod search_input_type;
+pub(crate) mod submit_input_type;
+pub(crate) mod tel_input_type;
+pub(crate) mod text_input_type;
+pub(crate) mod time_input_type;
+pub(crate) mod url_input_type;
+pub(crate) mod week_input_type;
 
 #[derive(Clone, JSTraceable, MallocSizeOf)]
 #[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
@@ -382,7 +404,10 @@ impl HTMLInputElement {
 
     #[inline]
     pub(crate) fn is_submit_button(&self) -> bool {
-        matches!(*self.input_type(), InputType::Submit(_) | InputType::Image(_))
+        matches!(
+            *self.input_type(),
+            InputType::Submit(_) | InputType::Image(_)
+        )
     }
 
     fn does_minmaxlength_apply(&self) -> bool {
@@ -1772,9 +1797,11 @@ impl HTMLInputElement {
         }
 
         if matches!(input_type, InputType::File(_)) {
-            input_type
-                .as_specific()
-                .set_files(&FileList::new(&self.owner_window(), vec![], can_gc));
+            input_type.as_specific().set_files(&FileList::new(
+                &self.owner_window(),
+                vec![],
+                can_gc,
+            ));
         }
 
         self.value_changed(can_gc);
@@ -1965,7 +1992,7 @@ impl HTMLInputElement {
             InputType::Color(ref color_input_type) => {
                 color_input_type.handle_color_picker_response(self, response, can_gc)
             },
-            _ => {}
+            _ => {},
         }
     }
 
@@ -1978,7 +2005,7 @@ impl HTMLInputElement {
             InputType::File(ref file_input_type) => {
                 file_input_type.handle_file_picker_response(self, response, can_gc)
             },
-            _ => {}
+            _ => {},
         }
     }
 
@@ -2039,12 +2066,7 @@ impl VirtualMethods for HTMLInputElement {
         Some(self.upcast::<HTMLElement>() as &dyn VirtualMethods)
     }
 
-    fn attribute_mutated(
-        &self,
-        cx: &mut JSContext,
-        attr: &Attr,
-        mutation: AttributeMutation,
-    ) {
+    fn attribute_mutated(&self, cx: &mut JSContext, attr: &Attr, mutation: AttributeMutation) {
         let could_have_had_embedder_control = self.may_have_embedder_control();
 
         self.super_type()
@@ -2246,12 +2268,9 @@ impl VirtualMethods for HTMLInputElement {
                 self.form_attribute_mutated(mutation, CanGc::from_cx(cx));
             },
             _ => {
-                self.input_type().as_specific().attribute_mutated(
-                    cx,
-                    self,
-                    attr,
-                    mutation,
-                );
+                self.input_type()
+                    .as_specific()
+                    .attribute_mutated(cx, self, attr, mutation);
             },
         }
 

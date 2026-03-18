@@ -8,17 +8,18 @@ use embedder_traits::{EmbedderControlRequest, FilePickerRequest, FilterPattern, 
 use script_bindings::codegen::GenericBindings::FileListBinding::FileListMethods;
 use script_bindings::codegen::GenericBindings::HTMLInputElementBinding::HTMLInputElementMethods;
 use script_bindings::domstring::DOMString;
+use script_bindings::inheritance::Castable;
 use script_bindings::script_runtime::CanGc;
 use style::str::split_commas;
-use script_bindings::inheritance::Castable;
+
 use crate::dom::bindings::root::{DomRoot, MutNullableDom};
 use crate::dom::document_embedder_controls::ControlElement;
 use crate::dom::event::{Event, EventBubbles, EventCancelable, EventComposed};
 use crate::dom::eventtarget::EventTarget;
 use crate::dom::file::File;
 use crate::dom::filelist::FileList;
-use crate::dom::htmlinputelement::HTMLInputElement;
-use crate::dom::htmlinputelement::inputtype::SpecificInputType;
+use crate::dom::input_element::HTMLInputElement;
+use crate::dom::input_element::input_type::SpecificInputType;
 use crate::dom::node::NodeTraits;
 
 const DEFAULT_FILE_INPUT_VALUE: &str = "No file chosen";
@@ -26,7 +27,7 @@ const DEFAULT_FILE_INPUT_MULTIPLE_VALUE: &str = "No files chosen";
 
 #[derive(Default, JSTraceable, MallocSizeOf, PartialEq)]
 pub(crate) struct FileInputType {
-    filelist: MutNullableDom<FileList>
+    filelist: MutNullableDom<FileList>,
 }
 
 impl FileInputType {
@@ -38,7 +39,8 @@ impl FileInputType {
     ) {
         let mut files = Vec::new();
 
-        if let Some(pending_webdriver_reponse) = input.pending_webdriver_response.borrow_mut().take()
+        if let Some(pending_webdriver_reponse) =
+            input.pending_webdriver_response.borrow_mut().take()
         {
             // From: <https://w3c.github.io/webdriver/#dfn-dispatch-actions-for-a-string>
             // "Complete implementation specific steps equivalent to setting the selected

@@ -4,8 +4,8 @@
 use url::Url;
 
 use crate::dom::bindings::str::DOMString;
-use crate::dom::htmlinputelement::inputtype::SpecificInputType;
-use crate::dom::types::HTMLInputElement;
+use crate::dom::input_element::HTMLInputElement;
+use crate::dom::input_element::input_type::SpecificInputType;
 
 #[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
 pub(crate) struct UrlInputType();
