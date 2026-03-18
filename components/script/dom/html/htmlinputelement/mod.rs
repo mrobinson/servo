@@ -1944,9 +1944,6 @@ impl HTMLInputElement {
     fn value_changed(&self, can_gc: CanGc) {
         self.maybe_update_shared_selection();
         self.update_related_validity_states(can_gc);
-        self.input_type()
-            .as_specific()
-            .update_shadow_tree(self, can_gc);
         self.get_or_create_shadow_tree(can_gc).update(self, can_gc);
     }
 

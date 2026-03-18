@@ -445,8 +445,6 @@ pub(crate) trait SpecificInputType {
 
     fn set_files(&self, _input: &HTMLInputElement, _filelist: &FileList) {}
 
-    fn update_shadow_tree(&self, _input: &HTMLInputElement, _can_gc: CanGc) {}
-
     fn attribute_mutated(
         &self,
         _input: &HTMLInputElement,
