@@ -33,6 +33,18 @@ use crate::dom::types::HTMLInputElement;
 pub(crate) struct ColorInputType();
 
 impl ColorInputType {
+    pub(crate) fn handle_color_picker_response(&self, input: &HTMLInputElement, response: Option<RgbColor>, can_gc: CanGc) {
+        let Some(selected_color) = response else {
+            return;
+        };
+
+        let formatted_color = format!(
+            "#{:0>2x}{:0>2x}{:0>2x}",
+            selected_color.red, selected_color.green, selected_color.blue
+        );
+        let _ = input.SetValue(formatted_color.into(), can_gc);
+    }
+
     /// <https://html.spec.whatwg.org/multipage/#update-a-color-well-control-color>
     pub(crate) fn update_a_color_well_control_color(
         input: &HTMLInputElement,

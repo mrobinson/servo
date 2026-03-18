@@ -12,10 +12,10 @@ use dom_struct::dom_struct;
 use embedder_traits::{EmbedderControlRequest, InputMethodRequest, RgbColor, SelectedFile};
 use encoding_rs::Encoding;
 use fonts::{ByteIndex, TextByteRange};
-use html5ever::{LocalName, Prefix, local_name};
+use html5ever::{local_name, LocalName, Prefix};
 use js::context::JSContext;
 use js::jsapi::{
-    ClippedTime, DateGetMsecSinceEpoch, Handle, JS_ClearPendingException, JSObject, NewDateObject,
+    ClippedTime, DateGetMsecSinceEpoch, Handle, JSObject, JS_ClearPendingException, NewDateObject,
     NewUCRegExpObject, ObjectIsDate, RegExpFlag_UnicodeSets, RegExpFlags,
 };
 use js::jsval::UndefinedValue;
@@ -30,7 +30,7 @@ use style::str::split_commas;
 use stylo_atoms::Atom;
 use stylo_dom::ElementState;
 use time::OffsetDateTime;
-use unicode_bidi::{BidiClass, bidi_class};
+use unicode_bidi::{bidi_class, BidiClass};
 use webdriver::error::ErrorStatus;
 
 use crate::clipboard_provider::EmbedderClipboardProvider;
@@ -52,9 +52,8 @@ use crate::dom::compositionevent::CompositionEvent;
 use crate::dom::document::Document;
 use crate::dom::document_embedder_controls::ControlElement;
 use crate::dom::element::{AttributeMutation, Element};
-use crate::dom::event::{Event, EventBubbles, EventCancelable, EventComposed};
+use crate::dom::event::Event;
 use crate::dom::eventtarget::EventTarget;
-use crate::dom::file::File;
 use crate::dom::filelist::FileList;
 use crate::dom::globalscope::GlobalScope;
 use crate::dom::html::htmldatalistelement::HTMLDataListElement;
@@ -77,7 +76,7 @@ use crate::dom::nodelist::NodeList;
 use crate::dom::text::Text;
 use crate::dom::textcontrol::{TextControlElement, TextControlSelection};
 use crate::dom::types::{CharacterData, FocusEvent, MouseEvent};
-use crate::dom::validation::{Validatable, is_barred_by_datalist_ancestor};
+use crate::dom::validation::{is_barred_by_datalist_ancestor, Validatable};
 use crate::dom::validitystate::{ValidationFlags, ValidityState};
 use crate::dom::virtualmethods::VirtualMethods;
 use crate::realms::enter_realm;
@@ -205,6 +204,7 @@ pub(crate) struct HTMLInputElement {
     size: Cell<u32>,
     maxlength: Cell<i32>,
     minlength: Cell<i32>,
+    // TODO investigate moving into specific input types
     #[no_trace]
     textinput: DomRefCell<TextInput<EmbedderClipboardProvider>>,
     /// <https://html.spec.whatwg.org/multipage/#concept-input-value-dirty-flag>
@@ -1961,15 +1961,12 @@ impl HTMLInputElement {
     }
 
     pub(crate) fn handle_color_picker_response(&self, response: Option<RgbColor>, can_gc: CanGc) {
-        let Some(selected_color) = response else {
-            return;
-        };
-
-        let formatted_color = format!(
-            "#{:0>2x}{:0>2x}{:0>2x}",
-            selected_color.red, selected_color.green, selected_color.blue
-        );
-        let _ = self.SetValue(formatted_color.into(), can_gc);
+        match *self.input_type() {
+            InputType::Color(ref color_input_type) => {
+                color_input_type.handle_color_picker_response(self, response, can_gc)
+            },
+            _ => {}
+        }
     }
 
     pub(crate) fn handle_file_picker_response(
@@ -1977,59 +1974,12 @@ impl HTMLInputElement {
         response: Option<Vec<SelectedFile>>,
         can_gc: CanGc,
     ) {
-        let mut files = Vec::new();
-
-        if let Some(pending_webdriver_reponse) = self.pending_webdriver_response.borrow_mut().take()
-        {
-            // From: <https://w3c.github.io/webdriver/#dfn-dispatch-actions-for-a-string>
-            // "Complete implementation specific steps equivalent to setting the selected
-            // files on the input element. If multiple is true files are be appended to
-            // element's selected files."
-            //
-            // Note: This is annoying.
-            if self.Multiple() {
-                if let Some(filelist) = self.input_type().as_specific().get_files() {
-                    files = filelist.iter_files().map(|file| file.as_rooted()).collect();
-                }
-            }
-
-            let number_files_selected = response.as_ref().map(Vec::len).unwrap_or_default();
-            pending_webdriver_reponse.finish(number_files_selected);
+        match *self.input_type() {
+            InputType::File(ref file_input_type) => {
+                file_input_type.handle_file_picker_response(self, response, can_gc)
+            },
+            _ => {}
         }
-
-        let Some(response_files) = response else {
-            return;
-        };
-
-        let window = self.owner_window();
-        files.extend(
-            response_files
-                .into_iter()
-                .map(|file| File::new_from_selected(&window, file, can_gc)),
-        );
-
-        // Only use the last file if this isn't a multi-select file input. This could
-        // happen if the attribute changed after the file dialog was initiated.
-        if !self.Multiple() {
-            files = files
-                .pop()
-                .map(|last_file| vec![last_file])
-                .unwrap_or_default();
-        }
-
-        self.input_type()
-            .as_specific()
-            .set_files(&FileList::new(&window, files, can_gc));
-
-        let target = self.upcast::<EventTarget>();
-        target.fire_event_with_params(
-            atom!("input"),
-            EventBubbles::Bubbles,
-            EventCancelable::NotCancelable,
-            EventComposed::Composed,
-            can_gc,
-        );
-        target.fire_bubbling_event(atom!("change"), can_gc);
     }
 
     fn handle_focus_event(&self, event: &FocusEvent) {
