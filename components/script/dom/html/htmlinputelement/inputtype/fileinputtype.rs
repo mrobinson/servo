@@ -11,7 +11,7 @@ use script_bindings::domstring::DOMString;
 use script_bindings::script_runtime::CanGc;
 use style::str::split_commas;
 
-use crate::dom::bindings::root::DomRoot;
+use crate::dom::bindings::root::{DomRoot, MutNullableDom};
 use crate::dom::document_embedder_controls::ControlElement;
 use crate::dom::event::Event;
 use crate::dom::eventtarget::EventTarget;
@@ -23,19 +23,19 @@ use crate::dom::node::NodeTraits;
 const DEFAULT_FILE_INPUT_VALUE: &str = "No file chosen";
 const DEFAULT_FILE_INPUT_MULTIPLE_VALUE: &str = "No files chosen";
 
-#[derive(Clone, Copy, Debug, Default, JSTraceable, MallocSizeOf, PartialEq)]
+#[derive(Default, JSTraceable, MallocSizeOf, PartialEq)]
 pub(crate) struct FileInputType {
-    // filelist: MutNullableDom<FileList>
+    filelist: MutNullableDom<FileList>
 }
 
 impl SpecificInputType for FileInputType {
     /// <https://html.spec.whatwg.org/multipage/#file-upload-state-(type=file):suffering-from-being-missing>
     fn suffers_from_being_missing(&self, input: &HTMLInputElement, _value: &DOMString) -> bool {
-        input.Required() && input.filelist.get().is_none_or(|files| files.Length() == 0)
+        input.Required() && self.filelist.get().is_none_or(|files| files.Length() == 0)
     }
 
     fn value_for_shadow_dom(&self, input: &HTMLInputElement) -> DOMString {
-        let Some(filelist) = input.filelist.get() else {
+        let Some(filelist) = self.filelist.get() else {
             if input.Multiple() {
                 return DEFAULT_FILE_INPUT_MULTIPLE_VALUE.into();
             }
@@ -101,12 +101,12 @@ impl SpecificInputType for FileInputType {
             );
     }
 
-    fn get_files(&self, input: &HTMLInputElement) -> Option<DomRoot<FileList>> {
-        input.filelist.get()
+    fn get_files(&self) -> Option<DomRoot<FileList>> {
+        self.filelist.get()
     }
 
-    fn set_files(&self, input: &HTMLInputElement, filelist: &FileList) {
-        input.filelist.set(Some(filelist))
+    fn set_files(&self, filelist: &FileList) {
+        self.filelist.set(Some(filelist))
     }
 }
 

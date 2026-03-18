@@ -215,7 +215,6 @@ pub(crate) struct HTMLInputElement {
     #[conditional_malloc_size_of]
     shared_selection: SharedSelection,
 
-    filelist: MutNullableDom<FileList>,
     form_owner: MutNullableDom<HTMLFormElement>,
     labels_node_list: MutNullableDom<NodeList>,
     validity_state: MutNullableDom<ValidityState>,
@@ -273,7 +272,6 @@ impl HTMLInputElement {
             )),
             value_dirty: Cell::new(false),
             shared_selection: Default::default(),
-            filelist: MutNullableDom::new(None),
             form_owner: Default::default(),
             labels_node_list: MutNullableDom::new(None),
             validity_state: Default::default(),
@@ -1122,7 +1120,7 @@ impl HTMLInputElementMethods<crate::DomTypeHolder> for HTMLInputElement {
     fn GetFiles(&self) -> Option<DomRoot<FileList>> {
         self.input_type()
             .as_specific()
-            .get_files(self)
+            .get_files()
             .as_ref()
             .cloned()
     }
@@ -1130,7 +1128,7 @@ impl HTMLInputElementMethods<crate::DomTypeHolder> for HTMLInputElement {
     /// <https://html.spec.whatwg.org/multipage/#dom-input-files>
     fn SetFiles(&self, files: Option<&FileList>) {
         if let Some(files) = files {
-            self.input_type().as_specific().set_files(self, files)
+            self.input_type().as_specific().set_files(files)
         }
     }
 
@@ -1203,7 +1201,7 @@ impl HTMLInputElementMethods<crate::DomTypeHolder> for HTMLInputElement {
                 }),
             ValueMode::Filename => {
                 let mut path = DOMString::from("");
-                match self.input_type().as_specific().get_files(self) {
+                match self.input_type().as_specific().get_files() {
                     Some(ref fl) => match fl.Item(0) {
                         Some(ref f) => {
                             path.push_str("C:\\fakepath\\");
@@ -1258,7 +1256,7 @@ impl HTMLInputElementMethods<crate::DomTypeHolder> for HTMLInputElement {
                 if value.is_empty() {
                     let window = self.owner_window();
                     let fl = FileList::new(&window, vec![], can_gc);
-                    self.input_type().as_specific().set_files(self, &fl)
+                    self.input_type().as_specific().set_files(&fl)
                 } else {
                     return Err(Error::InvalidState(None));
                 }
@@ -1776,7 +1774,7 @@ impl HTMLInputElement {
         if matches!(input_type, InputType::File(_)) {
             input_type
                 .as_specific()
-                .set_files(self, &FileList::new(&self.owner_window(), vec![], can_gc));
+                .set_files(&FileList::new(&self.owner_window(), vec![], can_gc));
         }
 
         self.value_changed(can_gc);
@@ -1793,10 +1791,10 @@ impl HTMLInputElement {
         // Step 3. Set checkedness based on presence of content attribute.
         self.update_checked_state(self.DefaultChecked(), false, can_gc);
         // Step 4. Empty selected files
-        if self.input_type().as_specific().get_files(self).is_some() {
+        if self.input_type().as_specific().get_files().is_some() {
             let window = self.owner_window();
             let filelist = FileList::new(&window, vec![], can_gc);
-            self.input_type().as_specific().set_files(self, &filelist);
+            self.input_type().as_specific().set_files(&filelist);
         }
 
         // Step 5. Invoke the value sanitization algorithm iff the type attribute's
@@ -1990,7 +1988,7 @@ impl HTMLInputElement {
             //
             // Note: This is annoying.
             if self.Multiple() {
-                if let Some(filelist) = self.input_type().as_specific().get_files(self) {
+                if let Some(filelist) = self.input_type().as_specific().get_files() {
                     files = filelist.iter_files().map(|file| file.as_rooted()).collect();
                 }
             }
@@ -2021,7 +2019,7 @@ impl HTMLInputElement {
 
         self.input_type()
             .as_specific()
-            .set_files(self, &FileList::new(&window, files, can_gc));
+            .set_files(&FileList::new(&window, files, can_gc));
 
         let target = self.upcast::<EventTarget>();
         target.fire_event_with_params(
@@ -2158,7 +2156,7 @@ impl VirtualMethods for HTMLInputElement {
                         if matches!(new_type, InputType::File(_)) {
                             let window = self.owner_window();
                             let filelist = FileList::new(&window, vec![], CanGc::from_cx(cx));
-                            new_type.as_specific().set_files(self, &filelist)
+                            new_type.as_specific().set_files(&filelist)
                         }
 
                         *self.input_type.borrow_mut() = new_type;

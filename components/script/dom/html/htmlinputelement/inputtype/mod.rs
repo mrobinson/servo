@@ -462,11 +462,11 @@ pub(crate) trait SpecificInputType {
 
     fn select_files(&self, _input: &HTMLInputElement, _test_paths: Option<Vec<DOMString>>) {}
 
-    fn get_files(&self, _input: &HTMLInputElement) -> Option<DomRoot<FileList>> {
+    fn get_files(&self) -> Option<DomRoot<FileList>> {
         None
     }
 
-    fn set_files(&self, _input: &HTMLInputElement, _filelist: &FileList) {}
+    fn set_files(&self, _filelist: &FileList) {}
 
     fn attribute_mutated(
         &self,
