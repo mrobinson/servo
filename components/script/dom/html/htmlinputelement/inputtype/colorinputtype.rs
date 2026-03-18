@@ -241,13 +241,13 @@ pub(crate) struct ColorInputShadowTree {
 impl ColorInputShadowTree {
     pub(crate) fn new(cx: &mut JSContext, shadow_root: &Node) -> Self {
         let color_value = Element::create(
+            cx,
             QualName::new(None, ns!(html), local_name!("div")),
             None,
             &shadow_root.owner_document(),
             ElementCreator::ScriptCreated,
             CustomElementCreationMode::Asynchronous,
             None,
-            CanGc::from_cx(cx),
         );
 
         Node::replace_all(cx, Some(color_value.upcast()), shadow_root.upcast());
