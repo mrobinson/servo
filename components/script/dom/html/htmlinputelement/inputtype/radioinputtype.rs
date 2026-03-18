@@ -142,16 +142,16 @@ impl SpecificInputType for RadioInputType {
 
     fn attribute_mutated(
         &self,
+        cx: &mut JSContext,
         input: &HTMLInputElement,
         attr: &Attr,
         mutation: AttributeMutation,
-        can_gc: CanGc,
     ) {
         match *attr.local_name() {
             local_name!("name") => radio_group_updated(
                 input,
                 mutation.new_value(attr).as_ref().map(|name| name.as_atom()),
-                can_gc,
+                CanGc::from_cx(cx),
             ),
             _ => {},
         }

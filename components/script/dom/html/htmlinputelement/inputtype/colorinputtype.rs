@@ -192,10 +192,10 @@ impl SpecificInputType for ColorInputType {
 
     fn attribute_mutated(
         &self,
+        _cx: &mut JSContext,
         input: &HTMLInputElement,
         attr: &Attr,
         _mutation: AttributeMutation,
-        _can_gc: CanGc,
     ) {
         match *attr.local_name() {
             local_name!("alpha") | local_name!("colorspace") => {

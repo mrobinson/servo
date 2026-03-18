@@ -2041,7 +2041,7 @@ impl VirtualMethods for HTMLInputElement {
 
     fn attribute_mutated(
         &self,
-        cx: &mut js::context::JSContext,
+        cx: &mut JSContext,
         attr: &Attr,
         mutation: AttributeMutation,
     ) {
@@ -2247,10 +2247,10 @@ impl VirtualMethods for HTMLInputElement {
             },
             _ => {
                 self.input_type().as_specific().attribute_mutated(
+                    cx,
                     self,
                     attr,
                     mutation,
-                    CanGc::from_cx(cx),
                 );
             },
         }

@@ -470,10 +470,10 @@ pub(crate) trait SpecificInputType {
 
     fn attribute_mutated(
         &self,
+        _cx: &mut JSContext,
         _input: &HTMLInputElement,
         _attr: &Attr,
         _mutation: AttributeMutation,
-        _can_gc: CanGc,
     ) {
     }
 
