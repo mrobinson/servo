@@ -1884,11 +1884,8 @@ impl HTMLInputElement {
     }
 
     pub(crate) fn handle_color_picker_response(&self, response: Option<RgbColor>, can_gc: CanGc) {
-        match *self.input_type() {
-            InputType::Color(ref color_input_type) => {
-                color_input_type.handle_color_picker_response(self, response, can_gc)
-            },
-            _ => {},
+        if let InputType::Color(ref color_input_type) = *self.input_type() {
+            color_input_type.handle_color_picker_response(self, response, can_gc)
         }
     }
 
@@ -1897,11 +1894,8 @@ impl HTMLInputElement {
         response: Option<Vec<SelectedFile>>,
         can_gc: CanGc,
     ) {
-        match *self.input_type() {
-            InputType::File(ref file_input_type) => {
-                file_input_type.handle_file_picker_response(self, response, can_gc)
-            },
-            _ => {},
+        if let InputType::File(ref file_input_type) = *self.input_type() {
+            file_input_type.handle_file_picker_response(self, response, can_gc)
         }
     }
 
