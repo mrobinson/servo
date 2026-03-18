@@ -1,14 +1,19 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+use js::context::JSContext;
 use script_bindings::domstring::parse_floating_point_number;
 
+use crate::dom::bindings::cell::DomRefCell;
 use crate::dom::bindings::str::DOMString;
+use crate::dom::htmlinputelement::text_input_widget::TextInputWidget;
 use crate::dom::input_element::HTMLInputElement;
 use crate::dom::input_element::input_type::SpecificInputType;
 
-#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
-pub(crate) struct RangeInputType();
+#[derive(Default, JSTraceable, MallocSizeOf, PartialEq)]
+pub(crate) struct RangeInputType {
+    text_input_widget: DomRefCell<TextInputWidget>,
+}
 
 impl SpecificInputType for RangeInputType {
     /// <https://html.spec.whatwg.org/multipage/#range-state-(type=range):value-sanitization-algorithm>
@@ -78,6 +83,18 @@ impl SpecificInputType for RangeInputType {
     /// <https://html.spec.whatwg.org/multipage/#range-state-(type=range):suffering-from-bad-input>
     fn suffers_from_bad_input(&self, value: &DOMString) -> bool {
         !value.is_valid_floating_point_number_string()
+    }
+
+    fn update_shadow_tree(&self, cx: &mut JSContext, input: &HTMLInputElement) {
+        self.text_input_widget
+            .borrow()
+            .update_shadow_tree(cx, input)
+    }
+
+    fn update_placeholder_contents(&self, cx: &mut JSContext, input: &HTMLInputElement) {
+        self.text_input_widget
+            .borrow()
+            .update_placeholder_contents(cx, input)
     }
 }
 

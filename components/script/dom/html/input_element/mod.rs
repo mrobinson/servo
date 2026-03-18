@@ -23,7 +23,6 @@ use js::rust::wrappers::{CheckRegExpSyntax, ExecuteRegExpNoStatics, ObjectIsRegE
 use js::rust::{HandleObject, MutableHandleObject};
 use layout_api::wrapper_traits::{ScriptSelection, SharedSelection};
 use script_bindings::codegen::GenericBindings::AttrBinding::AttrMethods;
-use script_bindings::codegen::GenericBindings::CharacterDataBinding::CharacterDataMethods;
 use script_bindings::domstring::parse_floating_point_number;
 use style::attr::AttrValue;
 use style::str::split_commas;
@@ -45,7 +44,7 @@ use crate::dom::bindings::codegen::Bindings::HTMLInputElementBinding::HTMLInputE
 use crate::dom::bindings::codegen::Bindings::NodeBinding::{GetRootNodeOptions, NodeMethods};
 use crate::dom::bindings::error::{Error, ErrorResult};
 use crate::dom::bindings::inheritance::Castable;
-use crate::dom::bindings::root::{Dom, DomRoot, LayoutDom, MutNullableDom};
+use crate::dom::bindings::root::{DomRoot, LayoutDom, MutNullableDom};
 use crate::dom::bindings::str::{DOMString, USVString};
 use crate::dom::clipboardevent::{ClipboardEvent, ClipboardEventType};
 use crate::dom::compositionevent::CompositionEvent;
@@ -62,20 +61,17 @@ use crate::dom::html::htmlfieldsetelement::HTMLFieldSetElement;
 use crate::dom::html::htmlformelement::{
     FormControl, FormDatum, FormDatumValue, FormSubmitterElement, HTMLFormElement, SubmittedFrom,
 };
-use crate::dom::input_element::color_input_type::ColorInputShadowTree;
 use crate::dom::input_element::input_type::InputType;
 use crate::dom::input_element::radio_input_type::{
     broadcast_radio_checked, perform_radio_group_validation,
 };
-use crate::dom::input_element::text_input_type::TextInputWidgetShadowTree;
 use crate::dom::keyboardevent::KeyboardEvent;
 use crate::dom::node::{
     BindContext, CloneChildrenFlag, Node, NodeDamage, NodeTraits, ShadowIncluding, UnbindContext,
 };
 use crate::dom::nodelist::NodeList;
-use crate::dom::text::Text;
 use crate::dom::textcontrol::{TextControlElement, TextControlSelection};
-use crate::dom::types::{CharacterData, FocusEvent, MouseEvent};
+use crate::dom::types::{FocusEvent, MouseEvent};
 use crate::dom::validation::{Validatable, is_barred_by_datalist_ancestor};
 use crate::dom::validitystate::{ValidationFlags, ValidityState};
 use crate::dom::virtualmethods::VirtualMethods;
@@ -103,96 +99,11 @@ pub(crate) mod search_input_type;
 pub(crate) mod submit_input_type;
 pub(crate) mod tel_input_type;
 pub(crate) mod text_input_type;
+pub(crate) mod text_input_widget;
+pub(crate) mod text_value_widget;
 pub(crate) mod time_input_type;
 pub(crate) mod url_input_type;
 pub(crate) mod week_input_type;
-
-#[derive(Clone, JSTraceable, MallocSizeOf)]
-#[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
-struct TextValueShadowTree {
-    value: Dom<Text>,
-}
-
-impl TextValueShadowTree {
-    fn new(cx: &mut JSContext, shadow_root: &Node) -> Self {
-        let value = Text::new(
-            Default::default(),
-            &shadow_root.owner_document(),
-            CanGc::from_cx(cx),
-        );
-        Node::replace_all(cx, Some(value.upcast()), shadow_root);
-        Self {
-            value: value.as_traced(),
-        }
-    }
-
-    fn update(&self, input_element: &HTMLInputElement) {
-        let character_data = self.value.upcast::<CharacterData>();
-        let value = input_element.value_for_shadow_dom();
-        if character_data.Data() != value {
-            character_data.SetData(value);
-        }
-    }
-}
-
-#[derive(Clone, JSTraceable, MallocSizeOf)]
-#[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
-#[non_exhaustive]
-enum InputElementShadowTree {
-    ColorInput(ColorInputShadowTree),
-    TextInput(TextInputWidgetShadowTree),
-    TextValue(TextValueShadowTree),
-    // TODO: Add shadow trees for other input types (range etc) here
-}
-
-impl InputElementShadowTree {
-    #[expect(unsafe_code)]
-    fn new(input_element: &HTMLInputElement, _can_gc: CanGc) -> Self {
-        // TODO https://github.com/servo/servo/issues/43253
-        let mut cx = unsafe { script_bindings::script_runtime::temp_cx() };
-        let cx = &mut cx;
-
-        let element = input_element.upcast::<Element>();
-        let shadow_root = element
-            .shadow_root()
-            .unwrap_or_else(|| element.attach_ua_shadow_root(cx, true));
-        let shadow_root = shadow_root.upcast();
-
-        if matches!(*input_element.input_type(), InputType::Color(_)) {
-            return Self::ColorInput(ColorInputShadowTree::new(cx, shadow_root));
-        }
-        if input_element.renders_as_text_input_widget() {
-            return Self::TextInput(TextInputWidgetShadowTree::new(cx, shadow_root));
-        }
-        Self::TextValue(TextValueShadowTree::new(cx, shadow_root))
-    }
-
-    fn is_valid_for_element(&self, input_element: &HTMLInputElement) -> bool {
-        if matches!(*input_element.input_type(), InputType::Color(_)) {
-            return matches!(self, InputElementShadowTree::ColorInput(_));
-        }
-        if input_element.renders_as_text_input_widget() {
-            return matches!(self, InputElementShadowTree::TextInput(_));
-        }
-        matches!(self, InputElementShadowTree::TextValue(_))
-    }
-
-    fn update_placeholder_contents(&self, cx: &mut JSContext, input_element: &HTMLInputElement) {
-        if let InputElementShadowTree::TextInput(shadow_tree) = self {
-            shadow_tree.update_placeholder(cx, input_element);
-        }
-    }
-
-    fn update(&self, input_element: &HTMLInputElement, can_gc: CanGc) {
-        match self {
-            InputElementShadowTree::ColorInput(shadow_tree) => {
-                shadow_tree.update(input_element, can_gc)
-            },
-            InputElementShadowTree::TextInput(shadow_tree) => shadow_tree.update(input_element),
-            InputElementShadowTree::TextValue(shadow_tree) => shadow_tree.update(input_element),
-        }
-    }
-}
 
 #[derive(Debug, PartialEq)]
 enum ValueMode {
@@ -226,7 +137,6 @@ pub(crate) struct HTMLInputElement {
     size: Cell<u32>,
     maxlength: Cell<i32>,
     minlength: Cell<i32>,
-    // TODO investigate moving into specific input types
     #[no_trace]
     textinput: DomRefCell<TextInput<EmbedderClipboardProvider>>,
     /// <https://html.spec.whatwg.org/multipage/#concept-input-value-dirty-flag>
@@ -240,7 +150,6 @@ pub(crate) struct HTMLInputElement {
     form_owner: MutNullableDom<HTMLFormElement>,
     labels_node_list: MutNullableDom<NodeList>,
     validity_state: MutNullableDom<ValidityState>,
-    shadow_tree: DomRefCell<Option<InputElementShadowTree>>,
     #[no_trace]
     pending_webdriver_response: RefCell<Option<PendingWebDriverResponse>>,
 }
@@ -297,7 +206,6 @@ impl HTMLInputElement {
             form_owner: Default::default(),
             labels_node_list: MutNullableDom::new(None),
             validity_state: Default::default(),
-            shadow_tree: Default::default(),
             pending_webdriver_response: Default::default(),
         }
     }
@@ -915,22 +823,6 @@ impl HTMLInputElement {
         }
 
         failed_flags
-    }
-
-    /// Get the shadow tree for this [`HTMLInputElement`], if it is created and valid, otherwise
-    /// recreate the shadow tree and return it.
-    fn get_or_create_shadow_tree(&self, can_gc: CanGc) -> Ref<'_, InputElementShadowTree> {
-        {
-            if let Ok(shadow_tree) = Ref::filter_map(self.shadow_tree.borrow(), |shadow_tree| {
-                shadow_tree
-                    .as_ref()
-                    .filter(|shadow_tree| shadow_tree.is_valid_for_element(self))
-            }) {
-                return shadow_tree;
-            }
-        }
-        *self.shadow_tree.borrow_mut() = Some(InputElementShadowTree::new(self, can_gc));
-        self.get_or_create_shadow_tree(can_gc)
     }
 
     /// Whether this input type renders as a basic text input widget.
@@ -1965,10 +1857,14 @@ impl HTMLInputElement {
         }
     }
 
+    #[expect(unsafe_code)]
     fn value_changed(&self, can_gc: CanGc) {
         self.maybe_update_shared_selection();
         self.update_related_validity_states(can_gc);
-        self.get_or_create_shadow_tree(can_gc).update(self, can_gc);
+        // TODO https://github.com/servo/servo/issues/43253
+        let mut cx = unsafe { script_bindings::script_runtime::temp_cx() };
+        let cx = &mut cx;
+        self.input_type().as_specific().update_shadow_tree(cx, self);
     }
 
     /// <https://html.spec.whatwg.org/multipage/#show-the-picker,-if-applicable>
@@ -2198,8 +2094,8 @@ impl VirtualMethods for HTMLInputElement {
                 }
 
                 self.update_placeholder_shown_state();
-                // self.input_type().as_specific().update_placeholder_contents(cx, self);
-                self.get_or_create_shadow_tree(CanGc::from_cx(cx))
+                self.input_type()
+                    .as_specific()
                     .update_placeholder_contents(cx, self);
             },
             local_name!("value") if !self.value_dirty.get() => {
@@ -2247,8 +2143,8 @@ impl VirtualMethods for HTMLInputElement {
                     }
                 }
                 self.update_placeholder_shown_state();
-                // self.input_type().as_specific().update_placeholder_contents(cx, self);
-                self.get_or_create_shadow_tree(CanGc::from_cx(cx))
+                self.input_type()
+                    .as_specific()
                     .update_placeholder_contents(cx, self);
             },
             local_name!("readonly") => {

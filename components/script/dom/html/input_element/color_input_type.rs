@@ -1,6 +1,8 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+use std::cell::Ref;
+
 use cssparser::{Parser, ParserInput};
 use embedder_traits::{EmbedderControlRequest, RgbColor};
 use html5ever::{local_name, ns};
@@ -19,6 +21,7 @@ use style_traits::{ParsingMode, ToCss};
 use url::Url;
 
 use crate::dom::attr::Attr;
+use crate::dom::bindings::cell::DomRefCell;
 use crate::dom::bindings::inheritance::Castable;
 use crate::dom::bindings::str::{DOMString, FromInputValueString};
 use crate::dom::document_embedder_controls::ControlElement;
@@ -29,8 +32,10 @@ use crate::dom::input_element::HTMLInputElement;
 use crate::dom::input_element::input_type::SpecificInputType;
 use crate::dom::node::{Node, NodeTraits, UnbindContext};
 
-#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
-pub(crate) struct ColorInputType();
+#[derive(Default, JSTraceable, MallocSizeOf, PartialEq)]
+pub(crate) struct ColorInputType {
+    shadow_tree: DomRefCell<Option<ColorInputShadowTree>>,
+}
 
 impl ColorInputType {
     pub(crate) fn handle_color_picker_response(
@@ -48,6 +53,30 @@ impl ColorInputType {
             selected_color.red, selected_color.green, selected_color.blue
         );
         let _ = input.SetValue(formatted_color.into(), can_gc);
+    }
+
+    /// Get the shadow tree for this [`HTMLInputElement`], if it is created and valid, otherwise
+    /// recreate the shadow tree and return it.
+    fn get_or_create_shadow_tree(
+        &self,
+        cx: &mut JSContext,
+        input: &HTMLInputElement,
+    ) -> Ref<'_, ColorInputShadowTree> {
+        {
+            if let Ok(shadow_tree) = Ref::filter_map(self.shadow_tree.borrow(), |shadow_tree| {
+                shadow_tree.as_ref()
+            }) {
+                return shadow_tree;
+            }
+        }
+
+        let element = input.upcast::<Element>();
+        let shadow_root = element
+            .shadow_root()
+            .unwrap_or_else(|| element.attach_ua_shadow_root(cx, true));
+        let shadow_root = shadow_root.upcast();
+        *self.shadow_tree.borrow_mut() = Some(ColorInputShadowTree::new(cx, shadow_root));
+        self.get_or_create_shadow_tree(cx, input)
     }
 
     /// <https://html.spec.whatwg.org/multipage/#update-a-color-well-control-color>
@@ -195,6 +224,10 @@ impl SpecificInputType for ColorInputType {
         );
     }
 
+    fn update_shadow_tree(&self, cx: &mut JSContext, input: &HTMLInputElement) {
+        self.get_or_create_shadow_tree(cx, input).update(cx, input)
+    }
+
     fn attribute_mutated(
         &self,
         _cx: &mut JSContext,
@@ -245,7 +278,7 @@ fn parse_color_value(value: &str, url: Url) -> AbsoluteColor {
         .unwrap_or(AbsoluteColor::BLACK)
 }
 
-#[derive(Clone, JSTraceable, MallocSizeOf)]
+#[derive(Clone, JSTraceable, MallocSizeOf, PartialEq)]
 #[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
 /// Contains references to the elements in the shadow tree for `<input type=color>`.
 ///
@@ -277,10 +310,13 @@ impl ColorInputShadowTree {
         }
     }
 
-    pub(crate) fn update(&self, input_element: &HTMLInputElement, can_gc: CanGc) {
+    pub(crate) fn update(&self, cx: &mut JSContext, input_element: &HTMLInputElement) {
         let value = input_element.Value();
         let style = format!("background-color: {value}");
-        self.color_value
-            .set_string_attribute(&local_name!("style"), style.into(), can_gc);
+        self.color_value.set_string_attribute(
+            &local_name!("style"),
+            style.into(),
+            CanGc::from_cx(cx),
+        );
     }
 }

@@ -23,7 +23,7 @@ use crate::dom::node::{BindContext, Node, ShadowIncluding, UnbindContext};
 use crate::dom::validation::Validatable;
 use crate::dom::validitystate::ValidationFlags;
 
-#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
+#[derive(Default, JSTraceable, MallocSizeOf, PartialEq)]
 pub(crate) struct RadioInputType();
 
 impl SpecificInputType for RadioInputType {

@@ -12,7 +12,7 @@ use crate::dom::input_element::input_type::{InputType, SpecificInputType};
 use crate::dom::input_element::{HTMLInputElement, InputActivationState};
 use crate::dom::node::Node;
 
-#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
+#[derive(Default, JSTraceable, MallocSizeOf, PartialEq)]
 pub(crate) struct CheckboxInputType();
 
 impl SpecificInputType for CheckboxInputType {

@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use embedder_traits::{EmbedderControlRequest, FilePickerRequest, FilterPattern, SelectedFile};
+use js::context::JSContext;
 use script_bindings::codegen::GenericBindings::FileListBinding::FileListMethods;
 use script_bindings::codegen::GenericBindings::HTMLInputElementBinding::HTMLInputElementMethods;
 use script_bindings::domstring::DOMString;
@@ -12,12 +13,14 @@ use script_bindings::inheritance::Castable;
 use script_bindings::script_runtime::CanGc;
 use style::str::split_commas;
 
+use crate::dom::bindings::cell::DomRefCell;
 use crate::dom::bindings::root::{DomRoot, MutNullableDom};
 use crate::dom::document_embedder_controls::ControlElement;
 use crate::dom::event::{Event, EventBubbles, EventCancelable, EventComposed};
 use crate::dom::eventtarget::EventTarget;
 use crate::dom::file::File;
 use crate::dom::filelist::FileList;
+use crate::dom::htmlinputelement::text_value_widget::TextValueWidget;
 use crate::dom::input_element::HTMLInputElement;
 use crate::dom::input_element::input_type::SpecificInputType;
 use crate::dom::node::NodeTraits;
@@ -28,6 +31,7 @@ const DEFAULT_FILE_INPUT_MULTIPLE_VALUE: &str = "No files chosen";
 #[derive(Default, JSTraceable, MallocSizeOf, PartialEq)]
 pub(crate) struct FileInputType {
     filelist: MutNullableDom<FileList>,
+    text_value_widget: DomRefCell<TextValueWidget>,
 }
 
 impl FileInputType {
@@ -171,6 +175,12 @@ impl SpecificInputType for FileInputType {
 
     fn set_files(&self, filelist: &FileList) {
         self.filelist.set(Some(filelist))
+    }
+
+    fn update_shadow_tree(&self, cx: &mut JSContext, input: &HTMLInputElement) {
+        self.text_value_widget
+            .borrow()
+            .update_shadow_tree(cx, input)
     }
 }
 

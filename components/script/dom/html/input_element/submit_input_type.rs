@@ -1,20 +1,25 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+use js::context::JSContext;
 use script_bindings::domstring::DOMString;
 use script_bindings::script_runtime::CanGc;
 
+use crate::dom::bindings::cell::DomRefCell;
 use crate::dom::event::Event;
 use crate::dom::eventtarget::EventTarget;
 use crate::dom::htmlformelement::{FormControl, FormSubmitterElement, SubmittedFrom};
+use crate::dom::htmlinputelement::text_value_widget::TextValueWidget;
 use crate::dom::input_element::HTMLInputElement;
 use crate::dom::input_element::input_type::SpecificInputType;
 use crate::dom::node::NodeTraits;
 
 const DEFAULT_SUBMIT_VALUE: &str = "Submit";
 
-#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
-pub(crate) struct SubmitInputType();
+#[derive(Default, JSTraceable, MallocSizeOf, PartialEq)]
+pub(crate) struct SubmitInputType {
+    text_value_widget: DomRefCell<TextValueWidget>,
+}
 
 impl SpecificInputType for SubmitInputType {
     fn value_for_shadow_dom(&self, _input: &HTMLInputElement) -> DOMString {
@@ -46,5 +51,11 @@ impl SpecificInputType for SubmitInputType {
                 can_gc,
             )
         }
+    }
+
+    fn update_shadow_tree(&self, cx: &mut JSContext, input: &HTMLInputElement) {
+        self.text_value_widget
+            .borrow()
+            .update_shadow_tree(cx, input)
     }
 }

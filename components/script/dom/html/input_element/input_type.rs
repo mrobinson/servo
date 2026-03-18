@@ -112,27 +112,27 @@ pub(crate) enum InputType {
 
 impl InputType {
     pub fn button() -> Self {
-        Self::Button(ButtonInputType())
+        Self::Button(ButtonInputType::default())
     }
 
     pub fn checkbox() -> Self {
-        Self::Checkbox(CheckboxInputType())
+        Self::Checkbox(CheckboxInputType::default())
     }
 
     pub fn color() -> Self {
-        Self::Color(ColorInputType())
+        Self::Color(ColorInputType::default())
     }
 
     pub fn date() -> Self {
-        Self::Date(DateInputType())
+        Self::Date(DateInputType::default())
     }
 
     pub fn datetime_local() -> Self {
-        Self::DatetimeLocal(DatetimeLocalInputType())
+        Self::DatetimeLocal(DatetimeLocalInputType::default())
     }
 
     pub fn email() -> Self {
-        Self::Email(EmailInputType())
+        Self::Email(EmailInputType::default())
     }
 
     pub fn file() -> Self {
@@ -140,63 +140,63 @@ impl InputType {
     }
 
     pub fn hidden() -> Self {
-        Self::Hidden(HiddenInputType())
+        Self::Hidden(HiddenInputType::default())
     }
 
     pub fn image() -> Self {
-        Self::Image(ImageInputType())
+        Self::Image(ImageInputType::default())
     }
 
     pub fn month() -> Self {
-        Self::Month(MonthInputType())
+        Self::Month(MonthInputType::default())
     }
 
     pub fn number() -> Self {
-        Self::Number(NumberInputType())
+        Self::Number(NumberInputType::default())
     }
 
     pub fn password() -> Self {
-        Self::Password(PasswordInputType())
+        Self::Password(PasswordInputType::default())
     }
 
     pub fn radio() -> Self {
-        Self::Radio(RadioInputType())
+        Self::Radio(RadioInputType::default())
     }
 
     pub fn range() -> Self {
-        Self::Range(RangeInputType())
+        Self::Range(RangeInputType::default())
     }
 
     pub fn reset() -> Self {
-        Self::Reset(ResetInputType())
+        Self::Reset(ResetInputType::default())
     }
 
     pub fn search() -> Self {
-        Self::Search(SearchInputType())
+        Self::Search(SearchInputType::default())
     }
 
     pub fn submit() -> Self {
-        Self::Submit(SubmitInputType())
+        Self::Submit(SubmitInputType::default())
     }
 
     pub fn tel() -> Self {
-        Self::Tel(TelInputType())
+        Self::Tel(TelInputType::default())
     }
 
     pub fn text() -> Self {
-        Self::Text(TextInputType())
+        Self::Text(TextInputType::default())
     }
 
     pub fn time() -> Self {
-        Self::Time(TimeInputType())
+        Self::Time(TimeInputType::default())
     }
 
     pub fn url() -> Self {
-        Self::Url(UrlInputType())
+        Self::Url(UrlInputType::default())
     }
 
     pub fn week() -> Self {
-        Self::Week(WeekInputType())
+        Self::Week(WeekInputType::default())
     }
 
     pub(crate) fn as_specific(&self) -> &dyn SpecificInputType {
@@ -444,6 +444,10 @@ pub(crate) trait SpecificInputType {
     }
 
     fn set_files(&self, _filelist: &FileList) {}
+
+    fn update_shadow_tree(&self, _cx: &mut JSContext, _input: &HTMLInputElement) {}
+
+    fn update_placeholder_contents(&self, _cx: &mut JSContext, _input: &HTMLInputElement) {}
 
     fn attribute_mutated(
         &self,

@@ -3,14 +3,19 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 use std::cmp::Ordering;
 
+use js::context::JSContext;
 use time::{Month, OffsetDateTime};
 
+use crate::dom::bindings::cell::DomRefCell;
 use crate::dom::bindings::str::{DOMString, FromInputValueString, ToInputValueString};
+use crate::dom::htmlinputelement::text_input_widget::TextInputWidget;
 use crate::dom::input_element::HTMLInputElement;
 use crate::dom::input_element::input_type::SpecificInputType;
 
-#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
-pub(crate) struct MonthInputType();
+#[derive(Default, JSTraceable, MallocSizeOf, PartialEq)]
+pub(crate) struct MonthInputType {
+    text_input_widget: DomRefCell<TextInputWidget>,
+}
 
 impl SpecificInputType for MonthInputType {
     fn sanitize_value(&self, _input: &HTMLInputElement, value: &mut DOMString) {
@@ -74,5 +79,17 @@ impl SpecificInputType for MonthInputType {
     /// <https://html.spec.whatwg.org/multipage/#month-state-(type=month):suffering-from-bad-input>
     fn suffers_from_bad_input(&self, value: &DOMString) -> bool {
         !value.str().is_valid_month_string()
+    }
+
+    fn update_shadow_tree(&self, cx: &mut JSContext, input: &HTMLInputElement) {
+        self.text_input_widget
+            .borrow()
+            .update_shadow_tree(cx, input)
+    }
+
+    fn update_placeholder_contents(&self, cx: &mut JSContext, input: &HTMLInputElement) {
+        self.text_input_widget
+            .borrow()
+            .update_placeholder_contents(cx, input)
     }
 }

@@ -3,15 +3,20 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use itertools::Itertools;
+use js::context::JSContext;
 use script_bindings::codegen::GenericBindings::HTMLInputElementBinding::HTMLInputElementMethods;
 use style::str::split_commas;
 
+use crate::dom::bindings::cell::DomRefCell;
 use crate::dom::bindings::str::{DOMString, FromInputValueString};
+use crate::dom::htmlinputelement::text_input_widget::TextInputWidget;
 use crate::dom::input_element::HTMLInputElement;
 use crate::dom::input_element::input_type::SpecificInputType;
 
-#[derive(Clone, Copy, Debug, JSTraceable, MallocSizeOf, PartialEq)]
-pub(crate) struct EmailInputType();
+#[derive(Default, JSTraceable, MallocSizeOf, PartialEq)]
+pub(crate) struct EmailInputType {
+    text_input_widget: DomRefCell<TextInputWidget>,
+}
 
 impl SpecificInputType for EmailInputType {
     fn sanitize_value(&self, input: &HTMLInputElement, value: &mut DOMString) {
@@ -49,5 +54,17 @@ impl SpecificInputType for EmailInputType {
         } else {
             !value.str().is_valid_email_address_string()
         }
+    }
+
+    fn update_shadow_tree(&self, cx: &mut JSContext, input: &HTMLInputElement) {
+        self.text_input_widget
+            .borrow()
+            .update_shadow_tree(cx, input)
+    }
+
+    fn update_placeholder_contents(&self, cx: &mut JSContext, input: &HTMLInputElement) {
+        self.text_input_widget
+            .borrow()
+            .update_placeholder_contents(cx, input)
     }
 }
