@@ -10,6 +10,7 @@ use crate::dom::input_element::input_type::SpecificInputType;
 use crate::dom::input_element::text_input_widget::TextInputWidget;
 
 #[derive(Default, JSTraceable, MallocSizeOf, PartialEq)]
+#[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
 pub(crate) struct TextInputType {
     text_input_widget: DomRefCell<TextInputWidget>,
 }

@@ -11,6 +11,7 @@ use script_bindings::script_runtime::CanGc;
 use stylo_atoms::Atom;
 
 use crate::dom::attr::Attr;
+use crate::dom::bindings::cell::DomRefCell;
 use crate::dom::bindings::codegen::Bindings::NodeBinding::GetRootNodeOptions;
 use crate::dom::bindings::inheritance::Castable;
 use crate::dom::element::AttributeMutation;
@@ -108,7 +109,7 @@ impl SpecificInputType for RadioInputType {
             checked: was_checked,
             indeterminate: false,
             checked_radio: checked_member.as_deref().map(DomRoot::from_ref),
-            old_type: InputType::radio(),
+            old_type: DomRefCell::new(InputType::radio()),
         })
     }
 

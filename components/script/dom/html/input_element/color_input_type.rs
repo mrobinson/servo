@@ -33,6 +33,7 @@ use crate::dom::input_element::input_type::SpecificInputType;
 use crate::dom::node::{Node, NodeTraits, UnbindContext};
 
 #[derive(Default, JSTraceable, MallocSizeOf, PartialEq)]
+#[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
 pub(crate) struct ColorInputType {
     shadow_tree: DomRefCell<Option<ColorInputShadowTree>>,
 }

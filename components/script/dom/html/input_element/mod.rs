@@ -155,12 +155,13 @@ pub(crate) struct HTMLInputElement {
 }
 
 #[derive(JSTraceable)]
+#[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
 pub(crate) struct InputActivationState {
     indeterminate: bool,
     checked: bool,
     checked_radio: Option<DomRoot<HTMLInputElement>>,
     // In case the type changed
-    old_type: InputType,
+    old_type: DomRefCell<InputType>,
     // was_mutable is implied: pre-activation would return None if it wasn't
 }
 
@@ -1999,29 +2000,21 @@ impl VirtualMethods for HTMLInputElement {
                 self.size.set(size.unwrap_or(DEFAULT_INPUT_SIZE));
             },
             local_name!("type") => {
-                let el = self.upcast::<Element>();
                 match mutation {
                     AttributeMutation::Set(..) => {
-                        let new_type = InputType::from(attr.value().as_atom());
+                        *self.input_type.borrow_mut() = InputType::from(attr.value().as_atom());
 
                         // https://html.spec.whatwg.org/multipage/#input-type-change
                         let (old_value_mode, old_idl_value) = (self.value_mode(), self.Value());
                         let previously_selectable = self.selection_api_applies();
 
-                        if new_type.is_textual() {
-                            let read_write = !(self.ReadOnly() || el.disabled_state());
-                            el.set_read_write_state(read_write);
+                        let element = self.upcast::<Element>();
+                        if self.input_type.borrow().is_textual() {
+                            let read_write = !(self.ReadOnly() || element.disabled_state());
+                            element.set_read_write_state(read_write);
                         } else {
-                            el.set_read_write_state(false);
+                            element.set_read_write_state(false);
                         }
-
-                        if matches!(new_type, InputType::File(_)) {
-                            let window = self.owner_window();
-                            let filelist = FileList::new(&window, vec![], CanGc::from_cx(cx));
-                            new_type.as_specific().set_files(&filelist)
-                        }
-
-                        *self.input_type.borrow_mut() = new_type;
 
                         let new_value_mode = self.value_mode();
                         match (&old_value_mode, old_idl_value.is_empty(), new_value_mode) {
@@ -2472,7 +2465,7 @@ impl Activatable for HTMLInputElement {
         let ty = self.input_type();
         let cache = match cache {
             Some(cache) => {
-                if cache.old_type != *ty {
+                if *cache.old_type.borrow() != *ty {
                     // Type changed, abandon ship
                     // https://www.w3.org/Bugs/Public/show_bug.cgi?id=27414
                     return;

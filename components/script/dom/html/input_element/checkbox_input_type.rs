@@ -6,6 +6,7 @@ use script_bindings::domstring::DOMString;
 use script_bindings::inheritance::Castable;
 use script_bindings::script_runtime::CanGc;
 
+use crate::dom::bindings::cell::DomRefCell;
 use crate::dom::event::{Event, EventBubbles, EventCancelable, EventComposed};
 use crate::dom::eventtarget::EventTarget;
 use crate::dom::input_element::input_type::{InputType, SpecificInputType};
@@ -65,7 +66,7 @@ impl SpecificInputType for CheckboxInputType {
             checked: was_checked,
             indeterminate: was_indeterminate,
             checked_radio: None,
-            old_type: InputType::checkbox(),
+            old_type: DomRefCell::new(InputType::checkbox()),
         })
     }
 

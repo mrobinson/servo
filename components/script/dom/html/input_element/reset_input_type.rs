@@ -17,6 +17,7 @@ use crate::dom::node::NodeTraits;
 const DEFAULT_RESET_VALUE: &str = "Reset";
 
 #[derive(Default, JSTraceable, MallocSizeOf, PartialEq)]
+#[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
 pub(crate) struct ResetInputType {
     text_value_widget: DomRefCell<TextValueWidget>,
 }

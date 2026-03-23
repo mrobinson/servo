@@ -42,6 +42,7 @@ use crate::dom::node::{BindContext, UnbindContext};
 
 /// <https://html.spec.whatwg.org/multipage/#attr-input-type>
 #[derive(JSTraceable, MallocSizeOf, PartialEq)]
+#[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
 pub(crate) enum InputType {
     /// <https://html.spec.whatwg.org/multipage/#button-state-(type=button)>
     Button(ButtonInputType),
@@ -111,92 +112,16 @@ pub(crate) enum InputType {
 }
 
 impl InputType {
-    pub fn button() -> Self {
-        Self::Button(ButtonInputType::default())
-    }
-
-    pub fn checkbox() -> Self {
+    pub(crate) fn checkbox() -> Self {
         Self::Checkbox(CheckboxInputType::default())
     }
 
-    pub fn color() -> Self {
-        Self::Color(ColorInputType::default())
-    }
-
-    pub fn date() -> Self {
-        Self::Date(DateInputType::default())
-    }
-
-    pub fn datetime_local() -> Self {
-        Self::DatetimeLocal(DatetimeLocalInputType::default())
-    }
-
-    pub fn email() -> Self {
-        Self::Email(EmailInputType::default())
-    }
-
-    pub fn file() -> Self {
-        Self::File(FileInputType::default())
-    }
-
-    pub fn hidden() -> Self {
-        Self::Hidden(HiddenInputType::default())
-    }
-
-    pub fn image() -> Self {
-        Self::Image(ImageInputType::default())
-    }
-
-    pub fn month() -> Self {
-        Self::Month(MonthInputType::default())
-    }
-
-    pub fn number() -> Self {
-        Self::Number(NumberInputType::default())
-    }
-
-    pub fn password() -> Self {
-        Self::Password(PasswordInputType::default())
-    }
-
-    pub fn radio() -> Self {
+    pub(crate) fn radio() -> Self {
         Self::Radio(RadioInputType::default())
     }
 
-    pub fn range() -> Self {
-        Self::Range(RangeInputType::default())
-    }
-
-    pub fn reset() -> Self {
-        Self::Reset(ResetInputType::default())
-    }
-
-    pub fn search() -> Self {
-        Self::Search(SearchInputType::default())
-    }
-
-    pub fn submit() -> Self {
-        Self::Submit(SubmitInputType::default())
-    }
-
-    pub fn tel() -> Self {
-        Self::Tel(TelInputType::default())
-    }
-
-    pub fn text() -> Self {
+    pub(crate) fn text() -> Self {
         Self::Text(TextInputType::default())
-    }
-
-    pub fn time() -> Self {
-        Self::Time(TimeInputType::default())
-    }
-
-    pub fn url() -> Self {
-        Self::Url(UrlInputType::default())
-    }
-
-    pub fn week() -> Self {
-        Self::Week(WeekInputType::default())
     }
 
     pub(crate) fn as_specific(&self) -> &dyn SpecificInputType {
@@ -333,31 +258,31 @@ impl TryFrom<&InputType> for InputMethodType {
 }
 
 impl From<&Atom> for InputType {
-    fn from(value: &Atom) -> InputType {
+    fn from(value: &Atom) -> Self {
         match value.to_ascii_lowercase() {
-            atom!("button") => Self::button(),
-            atom!("checkbox") => Self::checkbox(),
-            atom!("color") => Self::color(),
-            atom!("date") => Self::date(),
-            atom!("datetime-local") => Self::datetime_local(),
-            atom!("email") => Self::email(),
-            atom!("file") => Self::file(),
-            atom!("hidden") => Self::hidden(),
-            atom!("image") => Self::image(),
-            atom!("month") => Self::month(),
-            atom!("number") => Self::number(),
-            atom!("password") => Self::password(),
-            atom!("radio") => Self::radio(),
-            atom!("range") => Self::range(),
-            atom!("reset") => Self::reset(),
-            atom!("search") => Self::search(),
-            atom!("submit") => Self::submit(),
-            atom!("tel") => Self::tel(),
-            atom!("text") => Self::text(),
-            atom!("time") => Self::time(),
-            atom!("url") => Self::url(),
-            atom!("week") => Self::week(),
-            _ => Self::text(),
+            atom!("button") => InputType::Button(Default::default()),
+            atom!("checkbox") => InputType::Checkbox(Default::default()),
+            atom!("color") => InputType::Color(Default::default()),
+            atom!("date") => InputType::Date(Default::default()),
+            atom!("datetime-local") => InputType::DatetimeLocal(Default::default()),
+            atom!("email") => InputType::Email(Default::default()),
+            atom!("file") => InputType::File(Default::default()),
+            atom!("hidden") => InputType::Hidden(Default::default()),
+            atom!("image") => InputType::Image(Default::default()),
+            atom!("month") => InputType::Month(Default::default()),
+            atom!("number") => InputType::Number(Default::default()),
+            atom!("password") => InputType::Password(Default::default()),
+            atom!("radio") => InputType::Radio(Default::default()),
+            atom!("range") => InputType::Range(Default::default()),
+            atom!("reset") => InputType::Reset(Default::default()),
+            atom!("search") => InputType::Search(Default::default()),
+            atom!("submit") => InputType::Submit(Default::default()),
+            atom!("tel") => InputType::Tel(Default::default()),
+            atom!("text") => InputType::Text(Default::default()),
+            atom!("time") => InputType::Time(Default::default()),
+            atom!("url") => InputType::Url(Default::default()),
+            atom!("week") => InputType::Week(Default::default()),
+            _ => InputType::Text(Default::default()),
         }
     }
 }

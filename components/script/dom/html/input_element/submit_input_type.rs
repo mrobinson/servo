@@ -17,6 +17,7 @@ use crate::dom::node::NodeTraits;
 const DEFAULT_SUBMIT_VALUE: &str = "Submit";
 
 #[derive(Default, JSTraceable, MallocSizeOf, PartialEq)]
+#[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
 pub(crate) struct SubmitInputType {
     text_value_widget: DomRefCell<TextValueWidget>,
 }

@@ -14,6 +14,7 @@ use crate::dom::input_element::input_type::SpecificInputType;
 use crate::dom::node::NodeTraits;
 
 #[derive(Default, JSTraceable, MallocSizeOf, PartialEq)]
+#[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
 pub(crate) struct ImageInputType {
     text_value_widget: DomRefCell<TextValueWidget>,
 }

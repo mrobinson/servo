@@ -26,6 +26,7 @@ use crate::dom::node::{Node, NodeTraits};
 const PASSWORD_REPLACEMENT_CHAR: char = '●';
 
 #[derive(Default, JSTraceable, MallocSizeOf, PartialEq)]
+#[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
 pub(crate) struct TextInputWidget {
     shadow_tree: DomRefCell<Option<TextInputWidgetShadowTree>>,
 }

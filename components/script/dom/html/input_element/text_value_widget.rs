@@ -18,6 +18,7 @@ use crate::dom::node::{Node, NodeTraits};
 use crate::dom::text::Text;
 
 #[derive(Default, JSTraceable, MallocSizeOf, PartialEq)]
+#[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
 pub(crate) struct TextValueWidget {
     shadow_tree: DomRefCell<Option<TextValueShadowTree>>,
 }

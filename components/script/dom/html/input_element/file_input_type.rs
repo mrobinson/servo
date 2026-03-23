@@ -29,6 +29,7 @@ const DEFAULT_FILE_INPUT_VALUE: &str = "No file chosen";
 const DEFAULT_FILE_INPUT_MULTIPLE_VALUE: &str = "No files chosen";
 
 #[derive(Default, JSTraceable, MallocSizeOf, PartialEq)]
+#[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
 pub(crate) struct FileInputType {
     filelist: MutNullableDom<FileList>,
     text_value_widget: DomRefCell<TextValueWidget>,
