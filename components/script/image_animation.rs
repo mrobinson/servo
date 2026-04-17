@@ -3,16 +3,24 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use std::cell::Cell;
+use std::ffi::c_void;
 use std::sync::Arc;
 use std::time::Duration;
 
+use embedder_traits::UntrustedNodeAddress;
 use layout_api::AnimatingImages;
 use paint_api::ImageUpdate;
 use parking_lot::RwLock;
+use rustc_hash::FxHashMap;
 use script_bindings::codegen::GenericBindings::WindowBinding::WindowMethods;
+use script_bindings::root::Dom;
+use style::dom::OpaqueNode;
 use timers::{TimerEventRequest, TimerId};
 
+use crate::dom::bindings::cell::DomRefCell;
 use crate::dom::bindings::refcounted::Trusted;
+use crate::dom::bindings::trace::NoTrace;
+use crate::dom::from_untrusted_node_address;
 use crate::dom::node::Node;
 use crate::dom::window::Window;
 use crate::script_thread::with_script_thread;
@@ -29,6 +37,10 @@ pub struct ImageAnimationManager {
     /// The [`TimerId`] of the currently scheduled animated image update callback.
     #[no_trace]
     callback_timer_id: Cell<Option<TimerId>>,
+
+    /// A list of nodes with in-progress image animations. This is kept outside
+    /// of [`Self::animating_images`] as that data structure is shared with layout.
+    rooted_nodes: DomRefCell<FxHashMap<NoTrace<OpaqueNode>, Dom<Node>>>,
 }
 
 impl ImageAnimationManager {
@@ -86,12 +98,31 @@ impl ImageAnimationManager {
         self.maybe_schedule_update(window, now);
     }
 
-    /// After doing a layout, if the set of animating images was updated in some way,
-    /// schedule a new animation update.
-    pub(crate) fn maybe_schedule_update_after_layout(&self, window: &Window, now: f64) {
-        if self.animating_images().write().clear_dirty() {
-            self.maybe_schedule_update(window, now);
+    /// After doing a layout:
+    ///
+    ///  - root any nodes with new animating images and schedule updates for them.
+    ///  - cancel animations for any nodes that no longer have layout boxes.
+    pub(crate) fn do_post_reflow_update(&self, window: &Window, now: f64) {
+        if !self.animating_images().write().clear_dirty() {
+            return;
         }
+
+        #[expect(unsafe_code)]
+        {
+            let mut rooted_nodes = self.rooted_nodes.borrow_mut();
+            for opaque_node in self.animating_images().read().node_to_state_map.keys() {
+                rooted_nodes
+                    .entry(NoTrace(*opaque_node))
+                    .or_insert_with(|| {
+                        // SAFETY: This should be safe as this method is run directly after layout,
+                        // which should not remove any nodes.
+                        let address = UntrustedNodeAddress(opaque_node.0 as *const c_void);
+                        unsafe { Dom::from_ref(&*from_untrusted_node_address(address)) }
+                    });
+            }
+        }
+
+        self.maybe_schedule_update(window, now);
     }
 
     fn maybe_schedule_update(&self, window: &Window, now: f64) {

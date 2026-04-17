@@ -4330,10 +4330,7 @@ impl Document {
             .do_post_reflow_update(&self.window, self.current_animation_timeline_value());
         self.image_animation_manager
             .borrow()
-            .maybe_schedule_update_after_layout(
-                &self.window,
-                self.current_animation_timeline_value(),
-            );
+            .do_post_reflow_update(&self.window, self.current_animation_timeline_value());
     }
 
     pub(crate) fn cancel_animations_for_node(&self, node: &Node) {
