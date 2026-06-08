@@ -18,7 +18,9 @@ use crate::cell::ArcRefCell;
 use crate::context::LayoutContext;
 use crate::dom_traversal::{Contents, NodeAndStyleInfo};
 use crate::formatting_contexts::IndependentFormattingContext;
-use crate::fragment_tree::{BoxFragment, Fragment, FragmentFlags, HoistedSharedFragment};
+use crate::fragment_tree::{
+    BoxFragment, Fragment, FragmentFlags, HoistedSharedFragment, LayoutRootFragment,
+};
 use crate::geom::{
     AuOrAuto, LogicalRect, LogicalSides, LogicalSides1D, LogicalVec2, PhysicalPoint, PhysicalRect,
     PhysicalSides, PhysicalSize, PhysicalVec, ToLogical, ToLogicalWithContainingBlock,
@@ -112,6 +114,11 @@ pub(crate) struct PositioningContext {
 }
 
 impl PositioningContext {
+    #[inline]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.absolutes.is_empty()
+    }
+
     #[inline]
     pub(crate) fn new_for_layout_box_base(layout_box_base: &LayoutBoxBase) -> Option<Self> {
         Self::new_for_style_and_fragment_flags(
@@ -417,8 +424,6 @@ impl HoistedAbsolutelyPositionedBox {
                         containing_block,
                         containing_block_padding,
                     );
-
-                    hoisted_box.fragment.borrow_mut().fragment = Some(new_fragment.clone());
                     (new_fragment, new_hoisted_boxes)
                 })
                 .unzip_into_vecs(&mut new_fragments, &mut new_hoisted_boxes);
@@ -427,16 +432,13 @@ impl HoistedAbsolutelyPositionedBox {
             for_nearest_containing_block_for_all_descendants
                 .extend(new_hoisted_boxes.into_iter().flatten());
         } else {
-            fragments.extend(boxes.iter_mut().map(|box_| {
-                let new_fragment = box_.layout(
+            fragments.extend(boxes.iter_mut().map(|hoisted_box| {
+                hoisted_box.layout(
                     layout_context,
                     for_nearest_containing_block_for_all_descendants,
                     containing_block,
                     containing_block_padding,
-                );
-
-                box_.fragment.borrow_mut().fragment = Some(new_fragment.clone());
-                new_fragment
+                )
             }))
         }
     }
@@ -658,17 +660,26 @@ impl HoistedAbsolutelyPositionedBox {
         };
 
         if is_cached &&
-            let Some(Fragment::Box(old_fragment)) = context.base.fragments().first() &&
-            content_rect == old_fragment.content_rect()
+            let Some(old_fragment) = context.base.fragments().first() &&
+            let Some(old_box_fragment) = old_fragment
+                .retrieve_box_fragment()
+                .map(|fragment| fragment.clone()) &&
+            content_rect == old_box_fragment.content_rect()
         {
             // Drain the nested absolutes for which we are a containing block.
             // However, we are reusing the fragment, so no need to lay them out again.
-            positioning_context.forget_unhoisted_boxes(old_fragment);
+            positioning_context.forget_unhoisted_boxes(&old_box_fragment);
             adjust_hoisted_boxes(positioning_context);
-            return Fragment::Box(old_fragment.clone());
+
+            // The previously stored fragment may have been a LayoutRoot, so ensure that
+            // we are updating the result with the cached `BoxFragment` not its surrounding
+            // `LayoutRootFragment`.
+            self.fragment.borrow_mut().fragment = Some(Fragment::Box(old_box_fragment));
+
+            return old_fragment.clone();
         }
 
-        let mut new_fragment = BoxFragment::new(
+        let mut new_box_fragment = BoxFragment::new(
             context.base_fragment_info(),
             style,
             fragments,
@@ -682,11 +693,26 @@ impl HoistedAbsolutelyPositionedBox {
         // This is an absolutely positioned element, which means it also establishes a
         // containing block for absolutes. We lay out any absolutely positioned children
         // here and pass the rest to `hoisted_absolutes_from_children.`
-        positioning_context.layout_collected_children(layout_context, &mut new_fragment);
+        positioning_context.layout_collected_children(layout_context, &mut new_box_fragment);
+
+        // An absolutely-positioned box can be a layout root if it does not hoist any
+        // fixed positioned boxes out of it. This condition ensures isolation from parent
+        // layout meaning that laying out the absolutely positioned box again, will not
+        // affect ancestor layout.
+        let is_layout_root = positioning_context.is_empty();
 
         adjust_hoisted_boxes(positioning_context);
 
-        let fragment = Fragment::Box(new_fragment.into());
+        let fragment = Fragment::Box(new_box_fragment.into());
+        self.fragment.borrow_mut().fragment = Some(fragment.clone());
+
+        let fragment = match is_layout_root {
+            false => fragment,
+            true => Fragment::LayoutRoot(LayoutRootFragment {
+                fragment: self.fragment.clone(),
+            }),
+        };
+
         context.base.set_fragment(fragment.clone());
         fragment
     }
