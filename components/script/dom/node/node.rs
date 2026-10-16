@@ -4539,6 +4539,7 @@ pub(crate) trait NodeTraits {
     /// Get the [`Document`] that owns this node. Note that this may differ from the
     /// [`Document`] that the node was created in if it was adopted by a different
     /// [`Document`] (the owner).
+    #[track_caller]
     fn owner_document(&self) -> DomRoot<Document>;
     /// Get the [`Document`] that owns this node. Note that this may differ from the
     /// [`Document`] that the node was created in if it was adopted by a different
@@ -4548,6 +4549,7 @@ pub(crate) trait NodeTraits {
     /// Get the [`Window`] of the [`Document`] that owns this node. Note that this may
     /// differ from the [`Document`] that the node was created in if it was adopted by a
     /// different [`Document`] (the owner).
+    #[track_caller]
     fn owner_window(&self) -> DomRoot<Window>;
     /// Get the [`GlobalScope`] of the [`Document`] that owns this node. Note that this may
     /// differ from the [`GlobalScope`] that the node was created in if it was adopted by a
@@ -4561,6 +4563,7 @@ pub(crate) trait NodeTraits {
 }
 
 impl<T: DerivedFrom<Node> + DomObject> NodeTraits for T {
+    #[track_caller]
     fn owner_document(&self) -> DomRoot<Document> {
         self.upcast().owner_doc()
     }
@@ -4572,6 +4575,7 @@ impl<T: DerivedFrom<Node> + DomObject> NodeTraits for T {
         self.upcast().owner_doc_unrooted(no_gc)
     }
 
+    #[track_caller]
     fn owner_window(&self) -> DomRoot<Window> {
         DomRoot::from_ref(self.owner_document().window())
     }
