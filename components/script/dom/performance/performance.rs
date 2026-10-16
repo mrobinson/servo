@@ -599,6 +599,14 @@ impl PerformanceMethods<crate::DomTypeHolder> for Performance {
         mark_name: DOMString,
         mark_options: &PerformanceMarkOptions,
     ) -> Fallible<DomRoot<PerformanceMark>> {
+        // EXPERIMENT: `performance.mark("__rootstats:<label>")` prints and resets the rooting
+        // statistics of this thread, when they are compiled in.
+        if script_bindings::root_stats::ROOT_STATS_ENABLED {
+            if let Some(label) = mark_name.to_string().strip_prefix("__rootstats:") {
+                script_bindings::root::dump_root_stats(label);
+            }
+        }
+
         // Step 1. Run the PerformanceMark constructor and let entry be the newly created object.
         let entry =
             PerformanceMark::Constructor(cx, &self.global(), None, mark_name, mark_options)?;

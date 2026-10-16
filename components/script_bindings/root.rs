@@ -19,6 +19,7 @@ use crate::conversions::DerivedFrom;
 use crate::dom::UnrootedDom;
 use crate::inheritance::Castable;
 use crate::reflector::{DomObject, MutDomObject};
+use crate::root_stats::{ROOT_STATS_ENABLED, RootStats};
 use crate::trace::trace_reflector;
 
 /// A rooted value.
@@ -394,6 +395,8 @@ where
 /// [cstack]: https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey/Internals/GC/Exact_Stack_Rooting
 pub struct RootCollection {
     roots: UnsafeCell<Vec<*const dyn JSTraceable>>,
+    /// EXPERIMENT: rooting statistics, see `root_stats.rs`.
+    stats: RootStats,
 }
 
 impl RootCollection {
@@ -402,13 +405,34 @@ impl RootCollection {
     pub const fn new() -> RootCollection {
         RootCollection {
             roots: UnsafeCell::new(vec![]),
+            stats: RootStats::new(),
         }
+    }
+
+    /// EXPERIMENT: the number of live roots, the number of slots and the bytes allocated.
+    fn sizes(&self) -> (usize, usize, usize) {
+        let roots = unsafe { &*self.roots.get() };
+        (
+            roots.len(),
+            roots.len(),
+            roots.capacity() * mem::size_of::<*const dyn JSTraceable>(),
+        )
+    }
+
+    /// EXPERIMENT: print and reset the rooting statistics.
+    pub fn dump_stats(&self, label: &str) {
+        let (live, slots, bytes) = self.sizes();
+        self.stats.dump_and_reset(label, live, slots, bytes);
     }
 
     /// Starts tracking a trace object.
     unsafe fn root(&self, object: *const dyn JSTraceable) {
         assert_in_script();
         unsafe { (*self.roots.get()).push(object) };
+        if ROOT_STATS_ENABLED {
+            let (live, slots, bytes) = self.sizes();
+            self.stats.record_root(live, slots, bytes);
+        }
     }
 
     /// Stops tracking a trace object, asserting if it isn't found.
@@ -420,6 +444,9 @@ impl RootCollection {
             .rposition(|r| std::ptr::addr_eq(*r as *const (), object as *const ()))
         {
             Some(idx) => {
+                let last = roots.len() - 1;
+                self.stats
+                    .record_unroot((last - idx) as u64 + 1, (idx != last) as u64, idx == last);
                 // Partial inlining of `Vec::swap_remove` to avoid having to read and return the value since
                 // we don't care about it, doing less work in our case.
                 // SAFETY: the copy source and destination are derived from valid positions in the vector.
@@ -438,6 +465,11 @@ impl RootCollection {
 }
 
 thread_local!(pub static STACK_ROOTS: RootCollection = const { RootCollection::new() });
+
+/// EXPERIMENT: print and reset the rooting statistics of this thread.
+pub fn dump_root_stats(label: &str) {
+    STACK_ROOTS.with(|collection| collection.dump_stats(label));
+}
 
 /// SM Callback that traces the rooted reflectors
 ///

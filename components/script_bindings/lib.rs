@@ -48,6 +48,7 @@ pub mod record;
 pub mod refcounted;
 pub mod reflector;
 pub mod root;
+pub mod root_stats;
 pub mod routed_promise;
 pub mod script_runtime;
 pub mod serializable;
