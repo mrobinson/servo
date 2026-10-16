@@ -1716,6 +1716,7 @@ impl Node {
     }
 
     /// <https://dom.spec.whatwg.org/#concept-shadow-including-inclusive-ancestor>
+    #[track_caller]
     pub(crate) fn inclusive_ancestors(
         &self,
         shadow_including: ShadowIncluding,
@@ -1771,6 +1772,7 @@ impl Node {
         )
     }
 
+    #[track_caller]
     pub(crate) fn owner_doc(&self) -> DomRoot<Document> {
         self.owner_doc.get().unwrap()
     }
@@ -3763,6 +3765,7 @@ impl NodeMethods<crate::DomTypeHolder> for Node {
     }
 
     /// <https://dom.spec.whatwg.org/#dom-node-parentnode>
+    #[track_caller]
     fn GetParentNode(&self) -> Option<DomRoot<Node>> {
         self.parent_node().get()
     }
@@ -3791,11 +3794,13 @@ impl NodeMethods<crate::DomTypeHolder> for Node {
     }
 
     /// <https://dom.spec.whatwg.org/#dom-node-firstchild>
+    #[track_caller]
     fn GetFirstChild(&self) -> Option<DomRoot<Node>> {
         self.first_child().get()
     }
 
     /// <https://dom.spec.whatwg.org/#dom-node-lastchild>
+    #[track_caller]
     fn GetLastChild(&self) -> Option<DomRoot<Node>> {
         self.last_child().get()
     }
@@ -3806,6 +3811,7 @@ impl NodeMethods<crate::DomTypeHolder> for Node {
     }
 
     /// <https://dom.spec.whatwg.org/#dom-node-nextsibling>
+    #[track_caller]
     fn GetNextSibling(&self) -> Option<DomRoot<Node>> {
         self.next_sibling().get()
     }
