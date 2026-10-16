@@ -45,6 +45,7 @@ impl<T: DomObject> MutDom<T> {
     }
 
     /// Get the value in this `MutDom`.
+    #[track_caller]
     pub fn get(&self) -> DomRoot<T> {
         assert_in_script();
         unsafe { DomRoot::from_ref(&*ptr::read(self.val.get())) }
@@ -224,6 +225,7 @@ impl<T: DomObject> MutNullableDom<T> {
 
     /// Retrieve a copy of the current inner value. If it is `None`, it is
     /// initialized with the result of `cb` first.
+    #[track_caller]
     pub fn or_init<F>(&self, cb: F) -> DomRoot<T>
     where
         F: FnOnce() -> DomRoot<T>,
@@ -241,9 +243,13 @@ impl<T: DomObject> MutNullableDom<T> {
 
     /// Get a rooted ([`DomRoot`]) reference to the value contained in this
     /// [`MutNullableDom`].
+    #[track_caller]
     pub fn get(&self) -> Option<DomRoot<T>> {
         assert_in_script();
-        unsafe { ptr::read(self.ptr.get()).map(|o| DomRoot::from_ref(&*o)) }
+        match unsafe { ptr::read(self.ptr.get()) } {
+            Some(o) => Some(DomRoot::from_ref(unsafe { &*o })),
+            None => None,
+        }
     }
 
     /// Get a reference to the traced inner value of this [`MutNullableDom`].

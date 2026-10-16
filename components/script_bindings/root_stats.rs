@@ -6,7 +6,9 @@
 //! performance. Only compiled in when building with `SERVO_ROOT_STATS=1`; otherwise every
 //! recording function is a no-op that the compiler removes.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
+use std::panic::Location;
 
 /// Whether rooting statistics are recorded.
 pub const ROOT_STATS_ENABLED: bool = option_env!("SERVO_ROOT_STATS").is_some();
@@ -36,6 +38,8 @@ pub(crate) struct RootStats {
     peak_slots: Cell<usize>,
     /// Highest number of bytes allocated by the collection.
     peak_bytes: Cell<usize>,
+    /// Number of roots created by each caller.
+    callers: RefCell<Option<HashMap<&'static Location<'static>, u64>>>,
 }
 
 impl RootStats {
@@ -51,7 +55,16 @@ impl RootStats {
             peak_live: Cell::new(0),
             peak_slots: Cell::new(0),
             peak_bytes: Cell::new(0),
+            callers: RefCell::new(None),
         }
+    }
+
+    /// Record the caller that created a root.
+    pub(crate) fn record_caller(&self, caller: &'static Location<'static>) {
+        if !ROOT_STATS_ENABLED {
+            return;
+        }
+        *self.callers.borrow_mut().get_or_insert_with(HashMap::new).entry(caller).or_default() += 1;
     }
 
     /// Record a root being added, with the resulting size of the collection.
@@ -113,6 +126,13 @@ impl RootStats {
             self.peak_bytes.get(),
         );
         eprintln!("ROOTSTATS {label} {json}");
+        if let Some(callers) = self.callers.borrow_mut().take() {
+            let mut callers: Vec<_> = callers.into_iter().collect();
+            callers.sort_by(|a, b| b.1.cmp(&a.1));
+            for (caller, count) in callers.iter().take(60) {
+                eprintln!("ROOTCALLER {label} {count} {caller}");
+            }
+        }
 
         for counter in [
             &self.roots,

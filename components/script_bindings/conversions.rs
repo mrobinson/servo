@@ -352,11 +352,15 @@ where
 /// obj must point to a valid, non-null JS object.
 /// cx must point to a valid, non-null JS context.
 #[allow(clippy::result_unit_err)]
+#[track_caller]
 pub unsafe fn root_from_object<T>(cx: &mut JSContext, obj: *mut JSObject) -> Result<DomRoot<T>, ()>
 where
     T: DomObject + IDLInterface,
 {
-    unsafe { native_from_object(cx, obj).map(|ptr| DomRoot::from_ref(&*ptr)) }
+    match unsafe { native_from_object(cx, obj) } {
+        Ok(ptr) => Ok(DomRoot::from_ref(unsafe { &*ptr })),
+        Err(()) => Err(()),
+    }
 }
 
 /// Get a `DomRoot<T>` for a DOM object accessible from a `HandleValue`.

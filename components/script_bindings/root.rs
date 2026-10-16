@@ -40,7 +40,10 @@ where
     ///
     /// # Safety
     /// It must not outlive its associated `RootCollection`.
+    #[track_caller]
     pub unsafe fn new(value: T) -> Self {
+        let caller = std::panic::Location::caller();
+        STACK_ROOTS.with(|root_list| root_list.stats.record_caller(caller));
         unsafe fn add_to_root_list(object: *const dyn JSTraceable) -> *const RootCollection {
             assert_in_script();
             STACK_ROOTS.with(|root_list| {
@@ -204,6 +207,7 @@ impl<T: DomObject> Dom<T> {
     }
 
     /// Return a rooted version of this DOM object ([`DomRoot<T>`]) suitable for use on the stack.
+    #[track_caller]
     pub fn as_rooted(&self) -> DomRoot<T> {
         DomRoot::from_ref(self)
     }
@@ -322,6 +326,7 @@ impl<T: Castable> DomRoot<T> {
 
 impl<T: DomObject> DomRoot<T> {
     /// Generate a new root from a reference
+    #[track_caller]
     pub fn from_ref(unrooted: &T) -> DomRoot<T> {
         unsafe { DomRoot::new(Dom::from_ref(unrooted)) }
     }
@@ -373,6 +378,7 @@ impl<T> Clone for DomRoot<T>
 where
     T: DomObject,
 {
+    #[track_caller]
     fn clone(&self) -> DomRoot<T> {
         DomRoot::from_ref(self)
     }
