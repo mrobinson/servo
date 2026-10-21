@@ -1,0 +1,115 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Rooting microbenchmarks</title>
+<div id="host"></div>
+<script>
+// Each test is run REPS times after WARMUP runs, and the median time is reported.
+// Results are stored in `window.__results` so that a WebDriver harness can read them.
+const WARMUP = 2;
+const REPS = 7;
+
+function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+function itemHTML(i) {
+  return '<li><div class="view"><input class="toggle" type="checkbox"><label>Item ' + i +
+    '</label><button class="destroy"></button></div><input class="edit" value="Item ' + i + '"></li>';
+}
+
+function buildList(n) {
+  let html = '';
+  for (let i = 0; i < n; i++) html += itemHTML(i);
+  return html;
+}
+
+const host = document.getElementById('host');
+
+const tests = {
+  // Inserting a large fragment: the case from section 5 of the report.
+  'innerHTML-1600': {
+    setup() { this.html = buildList(1600); this.ul = document.createElement('ul'); host.appendChild(this.ul); },
+    run() { this.ul.innerHTML = this.html; },
+    teardown() { this.ul.remove(); },
+  },
+  'innerHTML-400': {
+    setup() { this.html = buildList(400); this.ul = document.createElement('ul'); host.appendChild(this.ul); },
+    run() { this.ul.innerHTML = this.html; },
+    teardown() { this.ul.remove(); },
+  },
+  // Creating and appending nodes one by one from script.
+  'createElement-append-10000': {
+    setup() { this.ul = document.createElement('ul'); host.appendChild(this.ul); },
+    run() {
+      this.ul.textContent = '';
+      for (let i = 0; i < 10000; i++) {
+        const li = document.createElement('li');
+        li.className = 'item';
+        li.appendChild(document.createTextNode('Item ' + i));
+        this.ul.appendChild(li);
+      }
+    },
+    teardown() { this.ul.remove(); },
+  },
+  // Walking the tree from script: every getter returns a new root, released in LIFO order.
+  'walk-siblings-x20': {
+    setup() { this.ul = document.createElement('ul'); this.ul.innerHTML = buildList(1600); host.appendChild(this.ul); },
+    run() {
+      let count = 0;
+      for (let r = 0; r < 20; r++) {
+        for (let li = this.ul.firstChild; li; li = li.nextSibling) {
+          for (let c = li.firstChild; c; c = c.nextSibling) count++;
+        }
+      }
+      return count;
+    },
+    teardown() { this.ul.remove(); },
+  },
+  // Deep clone of a large subtree.
+  'cloneNode-1600': {
+    setup() { this.ul = document.createElement('ul'); this.ul.innerHTML = buildList(1600); },
+    run() { return this.ul.cloneNode(true); },
+    teardown() {},
+  },
+  // Removing a large subtree.
+  'remove-1600': {
+    setup() { this.html = buildList(1600); this.ul = document.createElement('ul'); host.appendChild(this.ul); },
+    beforeEach() { this.ul.innerHTML = this.html; },
+    run() { this.ul.textContent = ''; },
+    teardown() { this.ul.remove(); },
+  },
+  // Selector matching over a large tree.
+  'querySelectorAll-x50': {
+    setup() { this.ul = document.createElement('ul'); this.ul.innerHTML = buildList(1600); host.appendChild(this.ul); },
+    run() {
+      let count = 0;
+      for (let r = 0; r < 50; r++) count += this.ul.querySelectorAll('li input.edit').length;
+      return count;
+    },
+    teardown() { this.ul.remove(); },
+  },
+};
+
+function runAll(filter) {
+  const results = {};
+  for (const [name, test] of Object.entries(tests)) {
+    if (filter && !filter.includes(name)) continue;
+    test.setup();
+    const times = [];
+    for (let i = 0; i < WARMUP + REPS; i++) {
+      if (test.beforeEach) test.beforeEach();
+      const start = performance.now();
+      test.run();
+      const elapsed = performance.now() - start;
+      if (i >= WARMUP) times.push(elapsed);
+    }
+    test.teardown();
+    results[name] = { median: median(times), times };
+  }
+  return results;
+}
+
+window.__runAll = runAll;
+window.__tests = Object.keys(tests);
+</script>
