@@ -945,6 +945,7 @@ impl Node {
     }
 
     /// Iterates over this node and all its descendants, in preorder.
+    #[track_caller]
     pub(crate) fn traverse_preorder(&self, shadow_including: ShadowIncluding) -> TreeIterator {
         TreeIterator::new(self, shadow_including)
     }

@@ -2,21 +2,20 @@
 
 Tools and notes from the October 2026 investigation of stack-rooting cost in `script`.
 
-## Branches
-- `rooting-experiment`: root statistics behind `SERVO_ROOT_STATS=1` (compile time), plus
-  this directory. `performance.mark("__rootstats:<label>")` prints `ROOTSTATS <label> {json}`
-  to stderr; the label `reset` clears the counters.
-- `rooting-attribution`: adds `#[track_caller]` to the rooting entry points and prints
-  `ROOTCALLER <label> <count> <file:line>` for the top callers. Only meaningful in a
-  `SERVO_ROOT_STATS=1` build.
-- `rooting-slab`: root collection where each root stores its slot index, with a free list.
-- `rooting-order`: order-preserving unroot (tail shift) and LIFO drop of the
-  post-connection list ("fix #5").
-- `rooting-reverse-drop`: drops the post-connection roots newest-first. Disproved, see below.
-- `rooting-lazy-box`: roots the post-connection list in `Node::insert` with one lazily
-  created `RootedTraceableBox<Vec<Dom<Node>>>`.
+## Branch
+`rooting-instrumentation` (rebased on `main` on 2026-10-26) holds everything:
+- Root statistics behind `SERVO_ROOT_STATS=1` (compile time).
+  `performance.mark("__rootstats:<label>")` prints `ROOTSTATS <label> {json}` to stderr; the label
+  `reset` clears the counters.
+- Per-caller attribution: `#[track_caller]` on the rooting entry points, `owner_doc`,
+  `owner_document`, `owner_window`, the tree getters, `traverse_preorder` and
+  `TreeIterator::new`. Prints `ROOTCALLER <label> <count> <file:line:col>` for the top 2000
+  callers. Only meaningful in a `SERVO_ROOT_STATS=1` build, and it changes calling
+  conventions, so do not use it for timing.
+- This directory.
 
-The last two are based on the owner-document rooting commit plus the statistics commit.
+The earlier experiment branches (slab, order-preserving unroot, reverse drop, lazy box) were
+deleted; their results are summarized below.
 
 ## Running
 ```

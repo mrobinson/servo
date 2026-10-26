@@ -129,7 +129,7 @@ impl RootStats {
         if let Some(callers) = self.callers.borrow_mut().take() {
             let mut callers: Vec<_> = callers.into_iter().collect();
             callers.sort_by(|a, b| b.1.cmp(&a.1));
-            for (caller, count) in callers.iter().take(60) {
+            for (caller, count) in callers.iter().take(2000) {
                 eprintln!("ROOTCALLER {label} {count} {caller}");
             }
         }

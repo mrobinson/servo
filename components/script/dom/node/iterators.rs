@@ -331,6 +331,7 @@ pub(crate) struct TreeIterator {
 }
 
 impl TreeIterator {
+    #[track_caller]
     pub(crate) fn new(root: &Node, shadow_including: ShadowIncluding) -> TreeIterator {
         TreeIterator {
             current: Some(DomRoot::from_ref(root)),
