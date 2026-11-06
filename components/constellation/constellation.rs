@@ -130,6 +130,7 @@ use paint_api::{
     PaintMessage, PaintProxy, PinchZoomInfos, PipelineExitSource, SendableFrameTree,
     WebRenderExternalImageIdManager,
 };
+use pixels::ServoImageDecoder;
 use profile_traits::mem::ProfilerMsg;
 use profile_traits::{mem, time};
 use rand::rngs::SmallRng;
@@ -537,6 +538,9 @@ pub struct Constellation<STF, SWF> {
     /// [`ImageCacheFactoryImpl`].
     pub(crate) image_cache_factory: Arc<ImageCacheFactoryImpl>,
 
+    /// The [`ImageDecoder`] to use for all `ScriptThread`s.
+    pub(crate) image_decoder: Arc<dyn ServoImageDecoder>,
+
     /// A map from `UserContentManagerId` to the `UserContents` for that manager.
     /// Multiple `WebView`s can share the same `UserContentManager` and any mutations
     /// to the `UserContents` need to be forwared to all the `ScriptThread`s that host
@@ -567,6 +571,9 @@ pub struct InitialConstellationState {
     /// A channel to the bluetooth thread.
     #[cfg(feature = "bluetooth")]
     pub bluetooth_thread: GenericSender<BluetoothRequest>,
+
+    /// The [`ImageDecoder`] used for all of servo
+    pub image_decoder: Arc<dyn ServoImageDecoder>,
 
     /// A proxy to the `SystemFontService` which manages the list of system fonts.
     pub system_font_service: Arc<SystemFontServiceProxy>,
@@ -762,8 +769,10 @@ where
                     event_loop_join_handles: Default::default(),
                     privileged_urls: state.privileged_urls,
                     image_cache_factory: Arc::new(ImageCacheFactoryImpl::new(
+                        state.image_decoder.clone(),
                         broken_image_icon_data,
                     )),
+                    image_decoder: state.image_decoder.clone(),
                     user_contents_for_manager_id: Default::default(),
                     // Servo is online by default.
                     online: true,

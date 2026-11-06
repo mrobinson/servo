@@ -43,6 +43,7 @@ use net_traits::ResourceThreads;
 use paint::{InitialPaintState, Paint};
 pub use paint_api::rendering_context::RenderingContext;
 use paint_api::{CrossProcessPaintApi, PaintMessage, PaintProxy};
+use pixels::ServoImageDecoder;
 use profile::{mem as profile_mem, time as profile_time};
 use profile_traits::mem::MemoryReportResult;
 #[cfg(feature = "multiprocess")]
@@ -1103,6 +1104,7 @@ impl Servo {
             async_runtime,
             public_storage_threads.clone(),
             private_storage_threads.clone(),
+            builder.image_decoder,
         );
 
         net::connector::prewarm_tls();
@@ -1328,6 +1330,7 @@ fn create_constellation(
     async_runtime: Box<dyn net_traits::AsyncRuntime>,
     public_storage_threads: StorageThreads,
     private_storage_threads: StorageThreads,
+    image_decoder: Arc<dyn ServoImageDecoder>,
 ) {
     // Global configuration options, parsed from the command line.
     let opts = opts::get();
@@ -1373,6 +1376,7 @@ fn create_constellation(
         async_runtime,
         privileged_urls,
         wake_lock_provider: Box::new(DefaultWakeLockDelegate),
+        image_decoder,
     };
 
     let layout_factory = Arc::new(LayoutFactoryImpl());
@@ -1471,6 +1475,7 @@ pub fn run_content_process(token: String) {
                 new_event_loop_info.initial_script_state,
                 layout_factory,
                 Arc::new(ImageCacheFactoryImpl::new(
+                    new_event_loop_info.image_decoder,
                     new_event_loop_info.broken_image_icon_data,
                 )),
                 background_hang_monitor_register,
@@ -1541,6 +1546,7 @@ pub struct ServoBuilder {
     preferences: Option<Box<Preferences>>,
     event_loop_waker: Box<dyn EventLoopWaker>,
     protocol_registry: ProtocolRegistry,
+    image_decoder: Arc<dyn ServoImageDecoder>,
 }
 
 impl Default for ServoBuilder {
@@ -1550,6 +1556,7 @@ impl Default for ServoBuilder {
             preferences: Default::default(),
             event_loop_waker: Box::new(DefaultEventLoopWaker),
             protocol_registry: Default::default(),
+            image_decoder: Arc::new(pixels::DefaultImageDecoder {}),
         }
     }
 }
@@ -1576,6 +1583,11 @@ impl ServoBuilder {
 
     pub fn protocol_registry(mut self, protocol_registry: ProtocolRegistry) -> Self {
         self.protocol_registry = protocol_registry;
+        self
+    }
+
+    pub fn image_decoder(mut self, image_decoder: Arc<dyn ServoImageDecoder>) -> Self {
+        self.image_decoder = image_decoder;
         self
     }
 }

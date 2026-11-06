@@ -27,7 +27,8 @@ use webrender_api::{
     ImageDescriptor, ImageDescriptorFlags, ImageFormat as WebRenderImageFormat, ImageKey,
 };
 
-use crate::traits::ServoImageDecoder;
+pub use crate::default_decoder::DefaultImageDecoder;
+pub use crate::traits::ServoImageDecoder;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, MallocSizeOf, PartialEq, Serialize)]
 pub enum FilterQuality {
@@ -530,13 +531,16 @@ pub struct ImageMetadata {
 // FIXME: Images must not be copied every frame. Instead we should atomically
 // reference count them.
 
-pub fn load_from_memory(buffer: &[u8], cors_status: CorsStatus) -> Option<RasterImage> {
+pub fn load_from_memory(
+    image_decoder: Arc<dyn ServoImageDecoder>,
+    buffer: &[u8],
+    cors_status: CorsStatus,
+) -> Option<RasterImage> {
     if buffer.is_empty() {
         return None;
     }
 
-    let decoder = default_decoder::DefaultDecoder::default();
-    decoder.decode_image(buffer, cors_status)
+    image_decoder.decode_image(buffer, cors_status)
 }
 
 // https://developer.mozilla.org/en-US/docs/Web/HTML/Element/img

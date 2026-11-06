@@ -14,6 +14,7 @@ use image::{
     AnimationDecoder, DynamicImage, ImageDecoder, ImageError, ImageFormat, ImageResult, Limits,
 };
 use log::debug;
+use serde::{Deserialize, Serialize};
 
 use crate::traits::ServoImageDecoder;
 use crate::{
@@ -332,10 +333,10 @@ where
     })
 }
 
-#[derive(Default)]
-pub(crate) struct DefaultDecoder {}
+#[derive(Default, Deserialize, Serialize)]
+pub struct DefaultImageDecoder {}
 
-impl DefaultDecoder {
+impl DefaultImageDecoder {
     fn make_decoder<'a>(
         format: ImageFormat,
         buffer: &'a [u8],
@@ -371,7 +372,8 @@ impl DefaultDecoder {
     }
 }
 
-impl ServoImageDecoder for DefaultDecoder {
+#[typetag::serde]
+impl ServoImageDecoder for DefaultImageDecoder {
     fn decode_image(
         &self,
         buffer: &[u8],

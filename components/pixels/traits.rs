@@ -4,6 +4,7 @@
 
 use crate::{CorsStatus, RasterImage};
 
-pub trait ServoImageDecoder: std::default::Default {
+#[typetag::serde(tag = "type")]
+pub trait ServoImageDecoder: Sync + Send {
     fn decode_image(&self, buffer: &[u8], cors_status: CorsStatus) -> Option<RasterImage>;
 }
