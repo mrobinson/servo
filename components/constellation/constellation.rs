@@ -538,9 +538,6 @@ pub struct Constellation<STF, SWF> {
     /// [`ImageCacheFactoryImpl`].
     pub(crate) image_cache_factory: Arc<ImageCacheFactoryImpl>,
 
-    /// The [`ImageDecoder`] to use for all `ScriptThread`s.
-    pub(crate) image_decoder: Arc<dyn ServoImageDecoder>,
-
     /// A map from `UserContentManagerId` to the `UserContents` for that manager.
     /// Multiple `WebView`s can share the same `UserContentManager` and any mutations
     /// to the `UserContents` need to be forwared to all the `ScriptThread`s that host
@@ -772,7 +769,6 @@ where
                         state.image_decoder.clone(),
                         broken_image_icon_data,
                     )),
-                    image_decoder: state.image_decoder.clone(),
                     user_contents_for_manager_id: Default::default(),
                     // Servo is online by default.
                     online: true,

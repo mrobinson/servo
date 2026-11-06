@@ -14,7 +14,6 @@ use image::{
     AnimationDecoder, DynamicImage, ImageDecoder, ImageError, ImageFormat, ImageResult, Limits,
 };
 use log::debug;
-use serde::{Deserialize, Serialize};
 
 use crate::traits::ServoImageDecoder;
 use crate::{
@@ -333,7 +332,7 @@ where
     })
 }
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Default)]
 pub struct DefaultImageDecoder {}
 
 impl DefaultImageDecoder {
@@ -372,7 +371,6 @@ impl DefaultImageDecoder {
     }
 }
 
-#[typetag::serde]
 impl ServoImageDecoder for DefaultImageDecoder {
     fn decode_image(
         &self,

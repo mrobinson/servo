@@ -18,7 +18,7 @@
 //!    events and customize certain behaviours.
 //! 3) Create an instance of a type that implements the [`RenderingContext`] trait.
 //!    Note: You can either use one of the existing types in this crate (such as
-//!    [`WindowRenderingContext`], [`OffscreenRenderingContext`] or [`SoftwareRenderingContext`])
+//!    [`WindowRenderingCo, ContentPntext`], [`OffscreenRenderingContext`] or [`SoftwareRenderingContext`])
 //!    or provide a custom implementation.
 //! 4) For each [`WebView`] in your application, create a [`WebViewBuilder`] by passing
 //!    it the [`RenderingContext`] and [`Servo`] instance, and then configure the
@@ -114,7 +114,7 @@ pub use crate::gamepad_delegate::{
 pub use crate::geolocation_delegate::{GeolocationDelegate, PositionRequest, PositionWatch};
 pub use crate::network_manager::{CacheEntry, NetworkManager};
 #[cfg(feature = "multiprocess")]
-pub use crate::servo::run_content_process;
+pub use crate::servo::{ContentProcessParameters, run_content_process};
 pub use crate::servo::{Servo, ServoBuilder};
 pub use crate::servo_delegate::{ServoDelegate, ServoError};
 pub use crate::site_data_manager::{SiteData, SiteDataManager, StorageType};

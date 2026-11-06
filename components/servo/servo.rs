@@ -43,6 +43,8 @@ use net_traits::ResourceThreads;
 use paint::{InitialPaintState, Paint};
 pub use paint_api::rendering_context::RenderingContext;
 use paint_api::{CrossProcessPaintApi, PaintMessage, PaintProxy};
+#[cfg(feature = "multiprocess")]
+use pixels::DefaultImageDecoder;
 use pixels::ServoImageDecoder;
 use profile::{mem as profile_mem, time as profile_time};
 use profile_traits::mem::MemoryReportResult;
@@ -1428,9 +1430,14 @@ fn set_logger(script_to_constellation_sender: ScriptToConstellationSender) {
     log::set_max_level(filter);
 }
 
+#[derive(Default)]
+pub struct ContentProcessParameters {
+    image_decoder: Option<Arc<dyn ServoImageDecoder>>,
+}
+
 /// Content process entry point.
 #[cfg(feature = "multiprocess")]
-pub fn run_content_process(token: String) {
+pub fn run_content_process(token: String, parameters: ContentProcessParameters) {
     let (unprivileged_content_sender, unprivileged_content_receiver) =
         ipc::channel::<UnprivilegedContent>().unwrap();
     let connection_bootstrap: IpcSender<IpcSender<UnprivilegedContent>> =
@@ -1475,7 +1482,9 @@ pub fn run_content_process(token: String) {
                 new_event_loop_info.initial_script_state,
                 layout_factory,
                 Arc::new(ImageCacheFactoryImpl::new(
-                    new_event_loop_info.image_decoder,
+                    parameters
+                        .image_decoder
+                        .unwrap_or_else(|| Arc::new(DefaultImageDecoder::default())),
                     new_event_loop_info.broken_image_icon_data,
                 )),
                 background_hang_monitor_register,
