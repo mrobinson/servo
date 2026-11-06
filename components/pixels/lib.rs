@@ -2,8 +2,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-mod decoding;
+mod default_decoder;
 mod snapshot;
+mod traits;
 
 use std::borrow::Cow;
 use std::fmt;
@@ -15,7 +16,7 @@ use std::time::Duration;
 use euclid::default::{Point2D, Rect, Size2D};
 use image::imageops::{self, FilterType};
 use image::{ImageBuffer, ImageFormat, Rgba};
-use log::{debug, error};
+use log::error;
 use malloc_size_of_derive::MallocSizeOf;
 use serde::{Deserialize, Serialize};
 use servo_base::cross_process_instant::CrossProcessInstant;
@@ -26,7 +27,7 @@ use webrender_api::{
     ImageDescriptor, ImageDescriptorFlags, ImageFormat as WebRenderImageFormat, ImageKey,
 };
 
-use crate::decoding::ServoImageDecoder;
+use crate::traits::ServoImageDecoder;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, MallocSizeOf, PartialEq, Serialize)]
 pub enum FilterQuality {
@@ -534,25 +535,8 @@ pub fn load_from_memory(buffer: &[u8], cors_status: CorsStatus) -> Option<Raster
         return None;
     }
 
-    let image_fmt_result = detect_image_format(buffer);
-    match image_fmt_result {
-        Err(msg) => {
-            debug!("{}", msg);
-            None
-        },
-        Ok(format) => {
-            let Ok(image_decoder) = decoding::DefaultImageDecoder::make_decoder(format, buffer)
-            else {
-                return None;
-            };
-
-            if image_decoder.is_animated() {
-                decoding::decode_animated_image(cors_status, image_decoder.animated_decoder())
-            } else {
-                decoding::decode_static_image(cors_status, image_decoder.decoder())
-            }
-        },
-    }
+    let decoder = default_decoder::DefaultDecoder::default();
+    decoder.decode_image(buffer, cors_status)
 }
 
 // https://developer.mozilla.org/en-US/docs/Web/HTML/Element/img
